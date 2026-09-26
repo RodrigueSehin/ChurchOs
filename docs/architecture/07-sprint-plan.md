@@ -15,7 +15,7 @@ conservant l'architecture et les conventions de ce document.
 | **4. Organization** ✅ | Organizations, campuses, users, roles, permissions (CRUD + UI `/settings/users`, `/settings/roles`) | RBAC opérationnel de bout en bout sur au moins un module test — **livré, vérifié en conditions réelles** |
 | **5. Members** ✅ | Membres, familles, visiteurs, groupes | CRUD complet + recherche/filtre/pagination serveur — **livré, vérifié en conditions réelles** |
 | **6. Pastoral** ✅ | Suivi pastoral, sujets de prière (confidentialité), visites, conseil pastoral | Confidentialité `PRIVATE` vérifiée par test E2E — **livré, vérifié en conditions réelles** |
-| **7. Ministries** | Ministères, équipes, ouvriers, services, planning | Affectation + détection de conflits de planning |
+| **7. Ministries** ✅ | Ministères, équipes, ouvriers, services, planning | Affectation + détection de conflits de planning — **livré, vérifié en conditions réelles** |
 | **8. Events** | Événements, inscriptions (+ QR code), présences, calendrier agrégé | Scan QR fonctionnel, calendrier agrège tous les modules pertinents |
 | **9. Finance** | Dons/offrandes, dépenses, budgets, rapports financiers, flux d'approbation | Permissions finance strictement isolées (test RLS dédié) |
 | **10. Training** | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil |
@@ -353,3 +353,84 @@ correctif ci-dessus.
 notification/rappel automatique sur les échéances de suivi pastoral ou d'action du conseil (aucune
 infrastructure de job asynchrone avant la Phase 11/Inngest) ; export PDF du compte-rendu d'une
 réunion du conseil pastoral.
+
+**PHASE 7 — Ministries** ✅ : livrée et vérifiée de bout en bout en conditions réelles (2026-09-26),
+y compris le critère de sortie explicite (affectation + détection de conflits de planning).
+
+Livré — cinq modules dans `features/{ministries,teams,workers,services,planning}/` :
+- **Ministères** (`/ministries`, `/ministries/[id]`) : même structure que les groupes (Phase 5) —
+  liste + fiche personne, membres avec rôle et retrait souple (`is_active = false`), responsable
+  optionnel. Seul module de la phase avec une route `[id]` dédiée, comme prévu dans
+  `01-project-structure.md`.
+- **Équipes** (`/teams`, page unique) : rattachement optionnel à un ministère
+  (`features/ministries/services` → nouvelle façade `getMinistriesForSelect`), gestion des
+  membres par dialogue plutôt que sous-page.
+- **Ouvriers** (`/workers`, page unique) : le "profil de service" d'une personne — numéro,
+  statut, compétences (stockées en texte séparé par virgules côté formulaire, tableau `jsonb`
+  côté base). C'est le pivot de la phase : `features/workers/services` expose
+  `getActiveWorkersForSelect`, consommé par les modules Services et Planning pour peupler leurs
+  sélecteurs d'affectation.
+- **Services** (`/services`, page unique) : cultes/réunions avec type (`service_types`, gérés
+  dans un petit dialogue dédié), et surtout des **affectations d'ouvriers**
+  (`service_assignments` : ouvrier + rôle + statut) — c'est ici que la détection de conflits se
+  déclenche à la création d'une affectation.
+- **Plannings** (`/planning`, page unique) : créneaux ponctuels (accueil, sonorisation...)
+  assignables à un ouvrier — même détection de conflits qu'un service, à la création ET à la
+  modification (en excluant le créneau lui-même de la vérification, sinon un créneau se
+  bloquerait contre sa propre plage horaire à chaque modification).
+- Catalogue de permissions étendu de 29 à **44 codes** (`ministries.*`, `teams.*`, `workers.*`,
+  `services.*`, `planning.*`, 3 codes chacun — voir [04-rbac-permissions.md](04-rbac-permissions.md)).
+  `MINISTRY_LEADER` reçoit les cinq groupes de permissions ; `WORKER` reçoit `services.view` et
+  `planning.view` en lecture seule (un ouvrier doit pouvoir voir ses propres affectations).
+
+**Détection de conflits de planning (critère de sortie explicite)** — `lib/scheduling/
+conflict-detection.ts`, `findWorkerConflicts()` : pour un ouvrier et un créneau horaire donnés,
+recherche tout chevauchement avec (a) ses `service_assignments` existantes (via
+`services.starts_at/ends_at`) et (b) ses `planning_slots` existants — les deux façons dont un
+ouvrier peut être "occupé" dans ce schéma. Une fin de créneau non renseignée est traitée comme une
+durée par défaut de 2h plutôt que d'être ignorée. Appelée par `addServiceAssignment` (Services) et
+par `createPlanningSlot`/`updatePlanningSlot` (Planning, avec exclusion du créneau modifié
+lui-même). En cas de conflit, l'écriture est refusée avec un message listant le(s)
+chevauchement(s) — un refus net, pas un avertissement contournable, pour que le comportement
+reste déterministe et testable.
+
+Vérifié en conditions réelles (organisation de test dédiée, nettoyée après) :
+- Ministère créé avec responsable + membre ; équipe créée et rattachée à ce ministère (façade
+  cross-module confirmée fonctionnelle en direct) ; ouvrier créé et visible dans les sélecteurs
+  Services/Planning.
+- **Conflit service ↔ service** : un ouvrier affecté à un premier service (10h-12h) ne peut pas
+  être affecté à un second service qui chevauche (11h-13h) — refus confirmé avec le bon message,
+  aucune ligne créée en base.
+- **Conflit croisé planning ↔ service** : le même ouvrier ne peut pas non plus être affecté à un
+  créneau de planning qui chevauche ce premier service (9h30-10h30 contre 10h-12h) — confirme que
+  la détection couvre bien les deux tables, pas seulement l'une d'elles.
+- **Non-conflit accepté** : un créneau de planning à un horaire réellement libre (14h-15h) est
+  créé sans problème.
+- **Exclusion de soi-même à la modification** : modifier ce créneau libre pour le déplacer sur un
+  horaire qui chevauche le premier service redéclenche bien le conflit (contre le service, pas
+  contre lui-même) — confirme que `excludePlanningSlotId` fonctionne et qu'un créneau ne se
+  bloque pas contre sa propre plage horaire à chaque sauvegarde.
+
+**Deux bugs réels trouvés et corrigés pendant cette vérification** :
+1. `getMinistryDetail` résolvait le "Responsable" du ministère en cherchant son `personId` dans
+   la liste des *membres* du ministère (`members.find(m => m.personId === ministry.leaderPersonId)`)
+   — copié du même motif dans `features/groups` (Phase 5), qui a la même limite non détectée
+   jusqu'ici. Un responsable choisi à la création n'est pas automatiquement membre : la fiche
+   affichait "—" au lieu de son nom dès qu'il n'avait pas été *aussi* ajouté comme membre.
+   Corrigé en résolvant le responsable directement par une requête séparée sur `people` dans
+   `getMinistryDetail`, indépendante de la liste des membres. `features/groups` a la même
+   limite latente, non corrigée dans cette phase (hors scope), à garder en tête.
+2. `findWorkerConflicts` (nouveau code de cette phase) construisait un fragment `sql` brut
+   (`drizzle-orm`) en y interpolant directement des objets `Date` JavaScript — le driver
+   `postgres` sous-jacent n'accepte pas un `Date` brut comme paramètre dans un fragment libre
+   (contrairement à une comparaison sur une colonne typée, où Drizzle fait la conversion), et
+   levait `TypeError: The "string" argument must be of type string or an instance of Buffer or
+   ArrayBuffer. Received an instance of Date` dès la première tentative d'affectation réelle.
+   Corrigé en convertissant explicitement les bornes en chaînes ISO avant de les interpoler.
+
+**Volontairement reporté** : `workers.availability` (disponibilités récurrentes par jour/heure,
+colonne `jsonb` existante mais non exposée dans l'UI cette phase — la détection de conflits
+couvre déjà les créneaux déjà réservés, pas les préférences de disponibilité) ; recherche
+combobox pour les sélecteurs (même réserve que les phases précédentes) ; wizard de résolution de
+conflit avec suggestion d'un autre ouvrier disponible (le refus net avec message clair a été jugé
+suffisant pour cette phase).

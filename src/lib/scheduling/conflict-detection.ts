@@ -36,8 +36,11 @@ export async function findWorkerConflicts(params: {
   excludeServiceAssignmentId?: string;
   excludePlanningSlotId?: string;
 }): Promise<SchedulingConflict[]> {
-  const newStart = params.startsAt;
-  const newEnd = effectiveEnd(params.startsAt, params.endsAt);
+  // `postgres` (le driver sous drizzle) n'accepte pas un `Date` brut comme paramètre dans un
+  // fragment `sql` libre (contrairement à une comparaison sur une colonne typée) — d'où la
+  // conversion explicite en ISO string ici.
+  const newStart = params.startsAt.toISOString();
+  const newEnd = effectiveEnd(params.startsAt, params.endsAt).toISOString();
 
   const serviceConflicts = await db
     .select({ title: services.title, startsAt: services.startsAt, endsAt: services.endsAt })

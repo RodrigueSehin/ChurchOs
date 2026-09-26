@@ -64,6 +64,15 @@ export async function getMinistryDetail(organizationId: string, ministryId: stri
     .where(and(eq(ministries.id, ministryId), eq(ministries.organizationId, organizationId)));
   if (!ministry) return null;
 
+  const leader = ministry.leaderPersonId
+    ? (
+        await db
+          .select({ firstName: people.firstName, lastName: people.lastName })
+          .from(people)
+          .where(eq(people.id, ministry.leaderPersonId))
+      )[0]
+    : null;
+
   const members = await db
     .select({
       ministryMemberId: ministryMembers.id,
@@ -81,7 +90,7 @@ export async function getMinistryDetail(organizationId: string, ministryId: stri
     .where(and(eq(ministryMembers.ministryId, ministryId), eq(ministryMembers.isActive, true)))
     .orderBy(asc(people.firstName));
 
-  return { ministry, members };
+  return { ministry, members, leader };
 }
 
 export async function getMinistriesForSelect(organizationId: string) {

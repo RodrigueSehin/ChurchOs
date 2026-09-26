@@ -49,8 +49,7 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
   ]);
   if (!detail) notFound();
 
-  const { ministry, members } = detail;
-  const leader = members.find((m) => m.personId === ministry.leaderPersonId);
+  const { ministry, members, leader } = detail;
   const canUpdate = check.context.isAdmin || check.context.permissions.has("ministries.update");
 
   return (
