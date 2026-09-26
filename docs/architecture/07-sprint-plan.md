@@ -1,0 +1,355 @@
+# Plan de développement par phase
+
+Chaque phase suit le cycle : Analyse → Architecture → Plan → Implémentation → Test → Correction →
+Validation. On ne passe à la phase suivante que lorsque la précédente est fonctionnelle
+(TypeScript propre, lint propre, migrations à jour, permissions vérifiées).
+
+Déclenchement : l'utilisateur dit **"PHASE SUIVANTE"** → implémentation de la phase suivante en
+conservant l'architecture et les conventions de ce document.
+
+| Phase | Contenu | Sortie attendue |
+|---|---|---|
+| **1. Foundation** ✅ | Projet Next.js/TS/Tailwind/shadcn, structure `features/`, Design System, layout (sidebar/topbar/breadcrumb), thème, responsive | App qui démarre, layout navigable avec données factices — **livré** |
+| **2. Database** ✅ | Adoption du schéma Supabase réel (`db/schema.sql`), miroir Drizzle, seed "Église Évangélique La Source" | `db:migrate:local` + `db:seed` fonctionnels — **livré** (vérifié sur Postgres local, RLS prouvé) |
+| **3. Authentication** ✅ | Login, register, logout, session, reset password, MFA, onboarding (5 étapes) | Un utilisateur peut créer un compte, une organisation, et atterrir sur `/dashboard` — **livré, vérifié en conditions réelles** |
+| **4. Organization** ✅ | Organizations, campuses, users, roles, permissions (CRUD + UI `/settings/users`, `/settings/roles`) | RBAC opérationnel de bout en bout sur au moins un module test — **livré, vérifié en conditions réelles** |
+| **5. Members** ✅ | Membres, familles, visiteurs, groupes | CRUD complet + recherche/filtre/pagination serveur — **livré, vérifié en conditions réelles** |
+| **6. Pastoral** ✅ | Suivi pastoral, sujets de prière (confidentialité), visites, conseil pastoral | Confidentialité `PRIVATE` vérifiée par test E2E — **livré, vérifié en conditions réelles** |
+| **7. Ministries** | Ministères, équipes, ouvriers, services, planning | Affectation + détection de conflits de planning |
+| **8. Events** | Événements, inscriptions (+ QR code), présences, calendrier agrégé | Scan QR fonctionnel, calendrier agrège tous les modules pertinents |
+| **9. Finance** | Dons/offrandes, dépenses, budgets, rapports financiers, flux d'approbation | Permissions finance strictement isolées (test RLS dédié) |
+| **10. Training** | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil |
+| **11. Communication** | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué |
+| **12. Documents & Resources** | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés |
+| **13. Analytics** | Dashboards enrichis, graphiques, rapports, exports PDF/Excel/CSV | Dashboard `/analytics` avec vraies agrégations SQL |
+| **14. Billing** | Plans, abonnements, facturation, `PaymentProvider` (Stripe + abstraction) | Upgrade/downgrade de plan fonctionnel en sandbox Stripe |
+| **15. ChurchOS AI** | AI Assistant, AI Reports, AI Communication, AI Pastoral Assistant, AI Analytics | Filtrage par permission vérifié (voir §AI data filtering) |
+| **16. Production** | Tests (Vitest/Playwright), sécurité, monitoring (Sentry/PostHog), performance, SEO, CI/CD, documentation | Déploiement Vercel + Supabase, CI verte |
+
+## Ce qui doit être vrai à la fin de chaque phase
+
+1. TypeScript compile sans `any` non justifié.
+2. Lint (ESLint) sans erreur.
+3. Migrations Drizzle générées et commitées, aucune dérive avec `db/schema.sql`.
+4. Chaque nouvelle table métier a ses 4 policies RLS + son filtrage applicatif.
+5. Chaque nouvelle page gère `Loading / Empty / Error / Success / Permission denied / No results`.
+6. Aucun bouton sans action réelle ; aucune donnée hardcodée à la place d'une donnée PostgreSQL.
+7. Documentation courte de ce qui a été livré (README de phase ou changelog), pas de document
+   d'analyse superflu.
+
+## Pivot de Phase 2 : adoption du schéma Supabase réel
+
+En cours de Phase 2, il s'est avéré qu'un vrai projet Supabase existait déjà avec son propre
+schéma (`db/churchos_supabase_schema.sql` à l'origine). Sur instruction explicite, ce schéma a été
+adopté **tel quel** comme source de vérité, à la place du design initial du STEP 01 — voir
+[`docs/architecture/02-database-schema.md`](02-database-schema.md) pour le détail complet des
+différences (modèle `people`/`members`, RBAC plus grossier au niveau RLS, catalogue de
+permissions réduit à 23 codes, RPC d'onboarding déjà existante côté DB, etc.). Toute la couche
+Drizzle (`src/lib/db/schema/`) et le RBAC (`src/lib/rbac/permissions.ts`) ont été réécrits en
+conséquence et re-vérifiés (migrations, RLS, seed) sur Postgres local.
+
+## Prochaine étape
+
+Phase 1 (Foundation) et Phase 2 (Database, sur le schéma réel) livrées et vérifiées :
+- `npm run lint` / `npm run build` / `npx tsc --noEmit` passent.
+- `db/schema.sql` (le vrai schéma) appliqué et **réellement vérifié** sur Postgres local
+  (`db:migrate:local`), RLS **réellement appliqué et prouvé** (`db:verify-rls` : isolation
+  multi-tenant confirmée par des requêtes exécutées sous le rôle `authenticated` avec RLS actif —
+  voir la réserve sur la confidentialité pastorale dans
+  [03-multi-tenancy-and-rls.md](03-multi-tenancy-and-rls.md)), seed "Église Évangélique La Source"
+  fonctionnel (via la RPC `create_organization_for_current_user`).
+- Réserve connue : `ai_documents` (RAG, pgvector) non testable localement faute de pgvector — voir
+  `db/local-postgres/README.md#pgvector-module-ia`. Sera vérifié contre le vrai Supabase.
+
+**PHASE 3 — Authentication** ✅ : livrée et vérifiée de bout en bout en conditions réelles.
+
+Le flux a été entièrement reconstruit le 2026-09-24/25 pour suivre une maquette visuelle fournie
+par l'utilisateur (voir `src/img/`) : l'écran scindé (panneau décoratif navy/or + illustration
+toit/croix reprenant le logo, pas de photo — aucun asset adapté disponible) remplace les cartes
+centrées d'origine, et **la création du compte se fait désormais à l'étape 2 de l'onboarding**
+(`/onboarding/admin`, publique) plutôt que sur une page `/register` séparée avant l'assistant —
+`/register` redirige maintenant vers `/onboarding/church`. Étapes 3 à 5 protégées
+individuellement (`requireUser()`), pas par un garde de layout global (les étapes 1-2 sont
+publiques). Nouvelle page `/onboarding/welcome` (succès) avant `/dashboard`.
+
+Vérifié **en conditions réelles** contre le vrai projet Supabase (2026-09-25, `DATABASE_URL`
+corrigé par l'utilisateur en cours de route) :
+- Parcours complet rejoué intégralement sans erreur : inscription (étape 1→2) → email de
+  confirmation réellement envoyé et reçu → connexion → configuration (3) → abonnement (4) →
+  finalisation (5, RPC + campus + `organization_features` + `subscriptions` créés pour de vrai)
+  → `/onboarding/welcome` → `/dashboard`, avec les vraies données (nom de l'église, ville, nom et
+  rôle de l'administrateur) affichées dans la topbar — **0 erreur console**. Le tableau
+  comparatif de l'étape Abonnement lit `plans.features` (peuplé via
+  `npm run db:seed-plan-features` — la colonne existait mais était vide).
+- Bugs réels trouvés et corrigés pendant cette vérification (pas seulement en review de code) :
+  1. Redirection en boucle : un utilisateur déjà authentifié sans organisation était renvoyé vers
+     `/onboarding/church` (donc retombait sur "compte déjà existant" à l'étape 2) au lieu de
+     `/onboarding/configuration` — corrigé dans `requireOrganization()`
+     (`src/lib/auth/session.ts`), et `/onboarding/admin` redirige maintenant lui-même vers
+     l'étape 3 si une session existe déjà.
+  2. Course de réhydratation Zustand/`sessionStorage` : les pages 2 à 5 lisaient/redirigeaient
+     sur le brouillon avant que `persist` ait fini de le relire depuis `sessionStorage`,
+     provoquant des redirections à tort vers l'étape 1 et des champs initialisés vides malgré un
+     brouillon existant. Corrigé via un flag `_hasHydrated` sur le store
+     (`features/onboarding/store.ts`) + `OnboardingHydratedGate` — les composants dont les champs
+     s'initialisent depuis le store (`useState(store.x)`) ne montent qu'après réhydratation.
+  3. Tableau comparatif des plans tronqué à une seule colonne : le conteneur de contenu
+     onboarding était `max-w-2xl` (672px, hérité des premières étapes plus simples), trop étroit
+     pour la grille de 4 plans + tableau + barre latérale de l'étape Abonnement — élargi à
+     `max-w-5xl`.
+
+**Corrigé — policies RLS manquantes** (repéré en testant la finalisation, pas en lecture de
+code) : `public.campuses` et `public.organization_settings` avaient RLS activé (§20) sans
+**aucune policy définie** — en Postgres, RLS activé sans policy = accès refusé à tout rôle non
+superutilisateur. Conséquence observée avant correctif : la création du campus principal
+échouait (`new row violates row-level security policy for table "campuses"`), donc aucune
+organisation créée par un vrai utilisateur ne pouvait terminer l'onboarding. Correctif (4
+policies sur `campuses`, 2 sur `organization_settings`, même posture que `organizations` :
+lecture ouverte aux membres, écriture réservée aux admins) ajouté à `db/schema.sql` (§20, juste
+après les policies `organizations`) **et appliqué à la vraie base par l'utilisateur** (SQL
+Editor Supabase) — reproduit et confirmé résolu par un nouveau parcours complet en direct.
+
+**Anomalie mineure observée, non creusée** : `organizations.created_by` reste `null` après
+`create_organization_for_current_user()` malgré `auth.uid()` explicitement utilisé dans sa
+définition — à vérifier (fonction peut-être différente en base réelle de celle de
+`db/schema.sql`). N'affecte rien de fonctionnel aujourd'hui (colonne non lue par le code).
+
+**Volontairement reporté** (hors du minimum "un utilisateur peut créer un compte, une
+organisation, et atterrir sur /dashboard") : l'inscription MFA (Phase 4) ; upload réel de la
+photo de profil (aperçu local seulement, aucun bucket Storage dans `db/schema.sql`) ; connexion
+Google (bouton retiré, provider non confirmé côté Supabase) ; parcours "Nous contacter" dédié au
+plan Enterprise (même flux self-service que les autres plans, pas d'adresse commerciale
+vérifiée) ; liens légaux du pied de page (pages inexistantes).
+
+**PHASE 4 — Organization** ✅ : livrée et vérifiée de bout en bout en conditions réelles
+(2026-09-25).
+
+Livré :
+- `lib/rbac/resolve.ts` (`resolveMembershipContext`) + `lib/auth/guards.ts` (`checkPermission`) :
+  résolution des permissions effectives d'un membership (bypass complet pour
+  `SUPER_ADMIN`/`CHURCH_OWNER`, sinon lecture réelle de `role_permissions` via les rôles
+  assignés) — la vérification applicative documentée dans
+  [04-rbac-permissions.md](04-rbac-permissions.md) est maintenant du code, pas seulement une
+  intention.
+- **Correctif d'infrastructure RBAC** : `db/schema.sql` ne seed jamais `role_permissions` pour
+  une organisation réelle (seul `db/seed/index.ts`, pour la démo, le faisait) — sans ça, aucun
+  rôle non-admin d'une vraie organisation n'aurait eu de permission fine. `finalizeOnboarding`
+  appelle maintenant `seedRolePermissionsForOrganization()`
+  (`lib/rbac/seed-role-permissions.ts`) juste après la création de l'organisation, en
+  s'appuyant sur `ROLE_PERMISSIONS` (même source de vérité TS que le seed de démo) via le
+  client authentifié (upsert idempotent, RLS `role_permissions_manage_admin` satisfaite par le
+  créateur).
+- `/settings/church` (`features/organizations/`) : édition des informations de l'église
+  (contact, adresse, fuseau horaire, devise, logo par URL) + gestion des campus (ajout,
+  modification, définir principal, suppression du non-principal) — CRUD complet, gated
+  `settings.manage`.
+- `/settings/users` (`features/rbac/`) : liste des membres (nom, email, rôle, statut, dernière
+  connexion réelle via `auth.users`), changement de rôle et de statut (actif/suspendu/parti — un
+  retrait est un changement de statut, pas un hard delete : `organization_memberships` n'a pas
+  de policy RLS `delete`), invitation par email réelle (`supabase.auth.admin.inviteUserByEmail`,
+  dans un **Route Handler** `/api/organizations/members/invite`, pas une Server Action — respecte
+  la restriction documentée dans `lib/supabase/admin.ts`).
+- `/settings/roles` (`features/rbac/`) : matrice rôles × permissions (cases à cocher réelles,
+  pas un mockup) + création de rôles personnalisés + suppression (rôles système protégés,
+  affichés avec un cadenas pour `SUPER_ADMIN`/`CHURCH_OWNER` — leur accès complet ne dépend pas
+  de `role_permissions`, cocher/décocher n'aurait aucun effet réel donc n'est pas proposé).
+- `auth-ref.ts` étendu (`email`, `last_sign_in_at` en lecture seule) pour afficher les membres
+  sans dupliquer de données Supabase Auth.
+
+Bugs réels trouvés et corrigés pendant la vérification en direct (pas en revue de code) :
+1. **IDs HTML dupliqués** : `CampusFormFields` réutilisait des `id` (`name`, `city`, `email`...)
+   déjà utilisés par le formulaire "Informations générales" toujours monté sur la même page —
+   deux éléments avec le même `id` en même temps cassent l'association `<label for>` (le
+   navigateur associe le premier trouvé, pas le bon), et un test réel via un vrai remplissage de
+   formulaire l'a démontré concrètement (le nom du campus partait dans le mauvais champ).
+   Corrigé par un `idPrefix` obligatoire, unique par instance du dialogue.
+2. **UI périmée après action impérative** : `revalidatePath()` (dans une Server Action) ne
+   rafraîchit automatiquement le rendu client qu'après une soumission de `<form action>` — un
+   appel impératif (`startTransition(async () => await action())`, utilisé pour les changements
+   de rôle/statut/campus principal/suppression) laissait l'écriture réussir en base mais
+   l'affichage rester périmé, `router.refresh()` inclus (peu fiable ici en conditions réelles).
+   Corrigé par deux approches selon la fréquence de l'action : état local optimiste directement
+   mis à jour dans `MembersTable`/`RolesMatrix` (checkboxes, changement de rôle/statut — fréquent,
+   doit rester réactif) ; rechargement complet de la page pour les actions rares (inviter,
+   ajouter/supprimer un campus, supprimer un rôle).
+3. Bouton "Annuler" de `ConfirmDialog` (composant partagé depuis la Phase 1) sans effet en usage
+   non contrôlé — corrigé (`DialogClose` au lieu d'un `onOpenChange` optionnel jamais fourni),
+   bénéficie à tous les usages futurs du composant.
+4. `NEXT_PUBLIC_APP_URL` absent de `.env.local` — cassait déjà silencieusement le lien de
+   réinitialisation de mot de passe (Phase 3) et aurait cassé le lien d'invitation (Phase 4).
+   Ajouté.
+
+Vérifié en conditions réelles (nouvelle organisation créée pour l'occasion, nettoyée après) :
+édition des infos d'église, ajout/modification/suppression/principal de campus, liste des
+membres avec vraie dernière connexion, changement de rôle et de statut (persistance confirmée en
+base à chaque fois, pas seulement à l'écran), matrice de permissions affichant les vraies
+`role_permissions` seedées à la création, bascule d'une permission (persistée), création d'un
+rôle personnalisé. L'envoi réel d'invitation par email a été vérifié une fois (erreur
+correctement affichée) puis re-testé indirectement (limite de débit d'emails Supabase atteinte
+pendant cette session de vérification intensive — comportement d'erreur propre confirmé, chemin
+"compte déjà existant" et écriture de la ligne membership/rôle vérifiés séparément via un
+utilisateur pré-confirmé).
+
+**Volontairement reporté** : filtrage de la sidebar par permission (mentionné dans
+[05-design-system.md](05-design-system.md), pas un critère de sortie explicite de cette phase —
+peu de valeur tant que la plupart des modules sont encore des pages "à venir") ; édition du titre
+d'un membre depuis `/settings/users` (l'action serveur `updateMemberTitle` existe déjà,
+pas encore reliée à une UI — le titre se règle aujourd'hui à l'invitation ou dans l'onboarding).
+
+**PHASE 5 — Members** ✅ : livrée et vérifiée de bout en bout en conditions réelles (2026-09-26).
+
+Livré — quatre modules dans `features/{members,families,visitors,groups}/` (queries/actions/
+schemas/components), chacun avec recherche + filtre + pagination **serveur** (état dans l'URL via
+`?q=&status=&page=`, pas un filtrage client sur une page déjà chargée) :
+- **Membres** (`/members`, `/members/new`, `/members/[id]`, `/members/[id]/edit`) : seul module
+  avec des pages dédiées (pas de dialogue) — c'est le plus riche en champs (`people` + `members`).
+  "Supprimer" un membre = archiver (`status = 'archived'`), pas un `DELETE` réel : la policy RLS
+  de suppression sur les tables métier exige `is_org_admin()`, un rôle avec seulement
+  `members.delete` (ex. `PASTOR`, qui n'est pas reconnu par `is_org_admin()`) serait bloqué par
+  RLS malgré la permission applicative — archiver est réversible, RLS-safe pour tout rôle
+  autorisé, et préserve l'historique.
+- **Familles** (`/families`, `/families/[id]`) : CRUD par dialogue (pas de route dédiée, comme
+  prévu dans `01-project-structure.md`) + gestion des membres de la famille (ajout par recherche
+  de personne existante, tête de famille / contact principal, retrait). Suppression de famille et
+  retrait d'un membre de famille réservés aux admins d'organisation (`family_members` n'a pas de
+  policy RLS `delete` pour un simple membre — même contrainte que ci-dessus).
+- **Visiteurs** (`/visitors`, `/visitors/[id]`) : création (personne + fiche visiteur en une
+  fois), suivi de statut (`nouveau` → ... → `converti`/`perdu de vue`), et surtout **conversion
+  réelle en membre** (`convertVisitorToMember`) : crée une vraie ligne `members` à partir de la
+  même personne, marque le visiteur `converted_to_member_id`, redirige vers la nouvelle fiche
+  membre — l'historique de visite n'est jamais perdu.
+- **Groupes** (`/groups`, `/groups/[id]`) : CRUD par dialogue + gestion des membres. Retrait d'un
+  membre de groupe = `is_active = false` (colonne dédiée sur `group_members`), pas un `DELETE` —
+  contrairement aux familles, cette action reste possible pour n'importe quel rôle avec
+  `members.update`, pas seulement les admins (pas de policy RLS bloquante ici).
+- Composants partagés ajoutés (réutilisables par les phases suivantes) : `NoResultsState`
+  (recherche/filtre sans résultat, distinct de `EmptyState` — prévu par
+  [05-design-system.md](05-design-system.md) mais jamais construit avant cette phase),
+  `Pagination`, `SearchBox`, `StatusFilterForm`.
+- Permissions : les quatre modules sont gated par le catalogue existant `members.*` (23 codes,
+  pas de nouveaux codes — familles/visiteurs/groupes sont des sous-ressources de "membres", voir
+  [04-rbac-permissions.md](04-rbac-permissions.md)).
+
+**Bug réel trouvé et corrigé pendant la vérification en direct — le plus sérieux de cette
+phase** : le helper `optionalString = z.string().optional().default("")`, dupliqué dans les 5
+fichiers de schémas Zod parsant du `FormData` (membres, familles, visiteurs, groupes,
+organisations), acceptait `undefined` mais pas `null` — or `FormData.get()` renvoie `null` (pas
+`undefined`) pour une clé absente, et `.default()` ne se déclenche que sur `undefined`, jamais
+sur `null`. Résultat concret : créer une famille échouait à coup sûr
+(`Invalid input: expected string, received null`) parce que le dialogue ne rendait pas de champ
+`notes` alors que le schéma l'attendait — un champ optionnel non rendu (ou simplement absent du
+DOM à cet instant) suffisait à faire échouer tout le formulaire. Ça ressemblait fortement, au
+premier abord, à un bug de timing React (`useActionState` remettant à zéro les champs non
+contrôlés) — plusieurs minutes ont été perdues à chasser cette fausse piste avant d'identifier la
+vraie cause en inspectant directement la valeur du champ juste avant soumission. Corrigé partout
+par `.nullish().transform(v => v ?? "")` (accepte `null` ET `undefined`, sort toujours une
+chaîne) ; les champs réellement manquants dans les formulaires (`notes` pour les familles, `code`
+pour les groupes) ont aussi été ajoutés puisqu'ils avaient un sens réel, pas seulement pour faire
+taire l'erreur.
+
+Autre correctif du même passage : le fil d'Ariane (`Breadcrumb`, composant partagé depuis la
+Phase 1) affichait l'UUID brut et mal capitalisé sur toute page `/module/[id]` (ex. "6da55cf4 B9c7
+46f9...") faute de connaître le titre réel de l'entité affichée — corrigé en détectant les
+segments au format UUID et en affichant "Détail" à la place ; bénéficie à toutes les pages de
+détail existantes et futures.
+
+Vérifié en conditions réelles (nouvelle organisation, nettoyée après) : création/liste/recherche/
+filtre/pagination/modification/archivage d'un membre ; création d'une famille, ajout d'un membre
+de famille (tête de famille + contact principal) ; création d'un visiteur puis conversion réelle
+en membre (redirection vers la nouvelle fiche vérifiée) ; création d'un groupe, ajout puis retrait
+d'un membre de groupe, modification du groupe — zéro erreur console à chaque étape.
+
+**Volontairement reporté** : recherche de personnes par texte pour les sélecteurs (responsable de
+groupe, contact de famille, "invité par"...) — un `<select>` natif listant toutes les personnes de
+l'organisation suffit à la volumétrie d'une église pour l'instant ; à remplacer par un vrai
+combobox avec recherche serveur si un client a un annuaire de plusieurs milliers de personnes.
+
+**PHASE 6 — Pastoral** ✅ : livrée et vérifiée de bout en bout en conditions réelles (2026-09-26),
+y compris le critère de sortie explicite (confidentialité vérifiée par test E2E, sur les deux
+couches — applicative et RLS, décision explicite de l'utilisateur pour ce module).
+
+Livré — quatre modules dans `features/{pastoral,prayer,visits,pastoral-council}/` :
+- **Suivi pastoral** (`/pastoral`, `/pastoral/new`, `/pastoral/[id]`) : suivi lié à une personne,
+  priorité, échéance, assigné à, et surtout un champ `confidentiality` à 3 niveaux (`normal` /
+  `pastoral` / `restricted`) qui contrôle à la fois la visibilité en liste, en détail (404 si non
+  autorisé, pas seulement un masquage visuel), et celle des notes de suivi (`pastoral_notes`,
+  booléen `is_private` séparé).
+- **Sujets de prière** (`/prayer`, `/prayer/new`, `/prayer/[id]`) : même logique de confidentialité
+  mais booléenne (`is_confidential`), personne concernée optionnelle (anonyme), fil de mises à jour
+  (`prayer_updates`), et action dédiée "Marquer comme exaucé" (`status = 'answered'` +
+  `answered_at` + témoignage optionnel).
+- **Visites** (`/visits`, `/visits/new`) : pas de route `[id]` (comme prévu dans
+  `01-project-structure.md`) — modification par dialogue directement depuis la liste. Aucune
+  confidentialité sur cette table (aucune colonne `is_confidential`/`is_private` dans le schéma).
+- **Conseil pastoral** (`/pastoral-council`, page unique) : réunions (ordre du jour, compte-rendu,
+  statut planifiée/tenue/annulée) avec, par réunion, deux sous-panneaux — participants
+  (personne **ou** utilisateur, présence) et actions à suivre (assigné, échéance, statut). Toute
+  la gestion se fait par formulaires/boutons inline sur la page, sans sous-route.
+
+**Décision de l'utilisateur (question posée explicitement avant implémentation)** : le durcissement
+de la confidentialité pastorale devait être **applicatif ET RLS** (pas seulement applicatif comme
+c'était le cas pour tout le reste du RBAC jusqu'ici, voir
+[04-rbac-permissions.md](04-rbac-permissions.md)) :
+- **Couche applicative** : `lib/rbac/confidentiality.ts` (`confidentialBooleanFilter`,
+  `confidentialityLevelFilter`) reproduit en Drizzle exactement la même logique que les policies
+  RLS ci-dessous — nécessaire car `DATABASE_URL` (utilisé par Drizzle, donc par toutes les pages)
+  se connecte avec un rôle qui **contourne RLS entièrement** ; sans ce filtre applicatif, RLS seul
+  ne protégerait qu'un accès direct à l'API Supabase, jamais les pages Next.js elles-mêmes.
+- **Couche RLS** (`db/schema.sql`, appliquée par l'utilisateur via le SQL Editor Supabase après
+  préparation du script par l'agent — modification de schéma live, hors permission d'écriture
+  directe) : les policies `select` génériques de `prayer_requests`, `pastoral_followups` et
+  `pastoral_notes` ont été remplacées par des policies dédiées qui référencent
+  `is_confidential`/`confidentiality`/`is_private`, `created_by`/`assigned_to_user_id`, et le
+  nouveau code `pastoral.view_confidential` via `public.has_permission()` — voir le détail complet
+  dans [03-multi-tenancy-and-rls.md](03-multi-tenancy-and-rls.md#confidentialité-pastorale-durcie-en-phase-6).
+- Catalogue de permissions étendu de 24 à **29 codes** : `pastoral.view_confidential` (nouveau,
+  pour la confidentialité) + `visits.view/create/update` et `pastoral_council.view/manage`
+  (absents jusqu'ici malgré des tables existant depuis le schéma initial) — voir
+  [04-rbac-permissions.md](04-rbac-permissions.md).
+- `getAssignableMembers()` (façade `features/rbac/services`) extrait de la logique jusque-là
+  dupliquée dans `features/pastoral/queries` — réutilisée par `prayer`, `visits` et
+  `pastoral-council` pour peupler les sélecteurs "assigné à" sans jamais exposer tous les
+  `auth.users` de l'instance (fuite inter-organisation à laquelle l'agent a fait attention dès
+  l'écriture, pas seulement en test).
+
+**Test E2E de confidentialité (critère de sortie explicite de cette phase)** — organisation de
+test dédiée, nettoyée après : un compte `CHURCH_OWNER` (admin) et un compte avec un **rôle
+personnalisé** ayant `pastoral.view`/`prayer.view`/`*.create`/`*.update` mais **sans**
+`pastoral.view_confidential` (le scénario réaliste : aucun rôle système seedé n'a `pastoral.view`
+sans avoir aussi la permission confidentielle — c'est un rôle personnalisé, créé via
+`/settings/roles`, qui expose la distinction). Quatre enregistrements créés par l'admin (un suivi
+`normal` + un `pastoral`, une prière non confidentielle + une confidentielle), plus une note
+privée et une note publique sur le suivi normal :
+- **Couche applicative** (Playwright, navigateur réel) : le compte restreint ne voit, dans les
+  listes `/pastoral` et `/prayer`, que les enregistrements non confidentiels ; l'accès direct par
+  URL à l'enregistrement confidentiel renvoie **404** (pas un message d'erreur — l'enregistrement
+  n'existe simplement pas pour cette requête) ; la note privée n'apparaît pas dans le panneau de
+  notes du suivi normal. Le compte admin voit tout.
+- **Couche RLS** (accès direct Postgres sous le rôle `authenticated` avec `request.jwt.claim.sub`
+  positionné, comme le fait PostgREST — même méthode que `db:verify-rls`, script écrit pour
+  l'occasion) : mêmes résultats obtenus **sans passer par Drizzle du tout**, confirmant que les
+  policies appliquées à la vraie base filtrent réellement, indépendamment de la couche applicative.
+
+**Bug réel trouvé et corrigé pendant cette vérification** : `councilActionSchema.status` (et
+`councilSchema.status`) utilisait `z.enum([...]).default("new")` — le même piège que celui
+documenté en Phase 5 (`.default()` ne se déclenche que sur `undefined`, jamais sur `null`, alors
+que `FormData.get()` renvoie `null` pour une clé absente). Contrairement aux formulaires
+pastoral/prayer/visits qui rendent toujours un `<select>` pour `status` (donc le champ est
+toujours présent dans le `FormData`, même s'il n'a jamais déclenché le bug), le mini-formulaire
+d'ajout d'action du conseil pastoral omet volontairement ce champ (une nouvelle action démarre
+toujours à `new`) — `formData.get("status")` valait donc réellement `null`, pas juste une chaîne
+vide, et l'ajout échouait avec `Invalid option: expected one of "new"|...`. Corrigé par le même
+motif `.nullish().transform(v => v ?? défaut)` déjà établi en Phase 5, appliqué directement dans le
+schéma plutôt que dans chaque appelant.
+
+Vérifié en conditions réelles au-delà de la confidentialité (même organisation de test) : création
+d'une visite + modification de statut (rafraîchissement automatique via `<form action>`
+confirmé) ; création d'une réunion du conseil pastoral, ajout d'un participant (personne) avec
+présence, ajout d'une action, changement de statut d'action inline, suppression de la réunion
+(admin uniquement, cascade réelle sur participants/actions) — zéro erreur console après le
+correctif ci-dessus.
+
+**Volontairement reporté** : recherche combobox pour les sélecteurs (même réserve qu'en Phase 5) ;
+notification/rappel automatique sur les échéances de suivi pastoral ou d'action du conseil (aucune
+infrastructure de job asynchrone avant la Phase 11/Inngest) ; export PDF du compte-rendu d'une
+réunion du conseil pastoral.
