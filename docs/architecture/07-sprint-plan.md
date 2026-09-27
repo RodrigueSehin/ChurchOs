@@ -16,7 +16,7 @@ conservant l'architecture et les conventions de ce document.
 | **5. Members** ✅ | Membres, familles, visiteurs, groupes | CRUD complet + recherche/filtre/pagination serveur — **livré, vérifié en conditions réelles** |
 | **6. Pastoral** ✅ | Suivi pastoral, sujets de prière (confidentialité), visites, conseil pastoral | Confidentialité `PRIVATE` vérifiée par test E2E — **livré, vérifié en conditions réelles** |
 | **7. Ministries** ✅ | Ministères, équipes, ouvriers, services, planning | Affectation + détection de conflits de planning — **livré, vérifié en conditions réelles** |
-| **8. Events** | Événements, inscriptions (+ QR code), présences, calendrier agrégé | Scan QR fonctionnel, calendrier agrège tous les modules pertinents |
+| **8. Events** ✅ | Événements, inscriptions (+ QR code), présences, calendrier agrégé | Scan QR fonctionnel, calendrier agrège tous les modules pertinents — **livré, vérifié en conditions réelles** |
 | **9. Finance** | Dons/offrandes, dépenses, budgets, rapports financiers, flux d'approbation | Permissions finance strictement isolées (test RLS dédié) |
 | **10. Training** | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil |
 | **11. Communication** | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué |
@@ -434,3 +434,89 @@ couvre déjà les créneaux déjà réservés, pas les préférences de disponib
 combobox pour les sélecteurs (même réserve que les phases précédentes) ; wizard de résolution de
 conflit avec suggestion d'un autre ouvrier disponible (le refus net avec message clair a été jugé
 suffisant pour cette phase).
+
+**PHASE 8 — Events** ✅ : livrée et vérifiée de bout en bout en conditions réelles (2026-09-27),
+y compris les deux critères de sortie explicites (scan QR fonctionnel, calendrier agrégeant tous
+les modules pertinents).
+
+Livré — quatre modules dans `features/{events,registrations,attendance,calendar}/` :
+- **Événements** (`/events`, `/events/new`, `/events/[id]`) : seul module de la phase avec des
+  pages dédiées (comme les membres) — catégories gérées dans un petit dialogue depuis la liste
+  (même motif que `ServiceTypeManager` en Phase 7), fiche détail avec liens directs vers les
+  inscriptions et les présences filtrées sur cet événement. `events.*`/`attendance.*` existaient
+  déjà dans le catalogue de permissions depuis le schéma d'origine (jamais utilisés avant cette
+  phase) ; seuls `registrations.*` et `calendar.*` sont réellement nouveaux (catalogue 44 → 49
+  codes).
+- **Inscriptions** (`/registrations`, page unique, filtrable par `?eventId=`) : inscription
+  d'une personne existante ou d'un invité sans compte (`event_registrations.person_id` ou
+  `guest_name`, au moins l'un des deux — contrainte du schéma reproduite dans le Zod), génération
+  d'un `qr_token` unguessable (`crypto.randomBytes`, jamais un compteur ou un UUID prévisible) à
+  la création, changement de statut inline, et un bouton "QR" par inscription ouvrant le code
+  généré à la demande (pas au chargement de la liste, pour éviter de générer une image PNG par
+  ligne inutilement).
+- **Présences** (`/attendance`, page unique, filtrable par `?eventId=`) : sessions de présence
+  rattachées à un événement ou un service (contrainte du schéma reproduite dans le Zod, comme les
+  inscriptions), check-in manuel par dialogue, et affichage d'une icône QR distincte sur les
+  présences enregistrées par ce canal (`attendance_records.method = 'qr'`) pour les distinguer
+  visuellement des saisies manuelles.
+- **Calendrier** (`/calendar`, page unique) : agrège en direct `events` + `services` +
+  `planning_slots` + `calendar_items` (entrées manuelles) plutôt que de dépendre d'une
+  synchronisation vers `calendar_items` — aucun trigger ne peuple cette table depuis les autres
+  dans `db/schema.sql`, une synchronisation aurait exigé de retoucher les Server Actions
+  create/update de trois phases précédentes. Vue agenda (liste chronologique groupée par jour,
+  pas une grille mensuelle) sur une fenêtre de 60 jours, avec lien direct vers la ressource
+  source pour chaque entrée sauf les entrées manuelles.
+
+**Scan QR fonctionnel (critère de sortie explicite)** — `src/app/api/qr/[token]/route.ts` (Route
+Handler `GET`, pas une Server Action) : point d'entrée que l'appareil qui scanne atteint
+directement (un lecteur de code QR grand public ouvre l'URL encodée, aucune UI de scan dédiée
+dans l'app n'était nécessaire pour ce critère). Aucune session requise — la seule autorisation
+est la connaissance du `qr_token`, ce qui est le motif standard de check-in par billet ; c'est
+pourquoi ce Route Handler utilise le client admin Supabase (`createAdminClient()`), légitime ici
+puisque RLS exigerait `is_org_member()`, qu'un scan anonyme ne peut jamais satisfaire — restriction
+documentée dans `lib/supabase/admin.ts` (autorisé en Route Handler, jamais en Server Action).
+Trouve-ou-crée une `attendance_sessions` pour l'événement au premier scan, marque
+`attendance_records` (`method = 'qr'`) uniquement pour les inscrits avec un `person_id` (un invité
+sans compte n'a pas de ligne `people` à laquelle rattacher une présence — seul son statut
+d'inscription passe à `attended`), et répond par une page HTML minimale en français
+(succès/déjà-enregistré/invalide), sans dépendance à un rendu React.
+
+Vérifié en conditions réelles (organisation de test dédiée, nettoyée après) :
+- Création d'un événement avec inscriptions activées, inscription d'une personne, génération du
+  QR (image PNG affichée dans un dialogue) — token récupéré en base pour construire l'URL de
+  scan sans caméra (technique équivalente à un vrai scan : le token est la seule autorisation).
+- **Scan réel** (navigation directe vers l'URL de check-in) : présence enregistrée, page de
+  confirmation nominative affichée, session de présence créée automatiquement pour l'événement,
+  statut de l'inscription passé à `attended`.
+- **Idempotence** : un second scan du même code affiche "Déjà enregistré" au lieu de dupliquer ou
+  d'échouer.
+- **Token invalide** : renvoie une 404 avec un message clair plutôt qu'une erreur serveur brute.
+- **Calendrier** : un service (4 octobre, 10h), un créneau de planning (4 octobre, 9h30) et
+  l'événement inscrit (10 octobre) apparaissent bien ensemble, correctement groupés par jour et
+  triés par heure, avec les bons liens vers chaque module source ; une entrée manuelle ajoutée
+  directement au calendrier apparaît à son tour au bon endroit chronologique.
+
+**Deux bugs réels trouvés et corrigés pendant cette vérification** :
+1. La fiche événement passait un `<div>` (deux badges côte à côte) comme `description` à
+   `PageHeader`, qui enveloppe systématiquement `description` dans un `<p>` — un `<div>` dans un
+   `<p>` est un HTML invalide et déclenchait une vraie erreur d'hydratation React, visible
+   uniquement dans la console (le rendu final semblait correct). Corrigé en remplaçant le `<div>`
+   par un `<span inline-flex>`, valide dans un `<p>`. Recherché dans le reste du code : aucune
+   autre page ne passe un bloc non-inline comme `description`.
+2. **La même famille de bug qu'aux Phases 5/6, une troisième fois** : `registrationSchema.status`
+   utilisait `z.enum([...]).default("pending")`, mais le dialogue de création d'inscription
+   n'affiche volontairement aucun champ statut (une nouvelle inscription démarre toujours
+   `pending`) — `formData.get("status")` valait donc `null`, pas juste absent, et `.default()`
+   ne se déclenche que sur `undefined`. Corrigé avec le motif `.nullish().transform(v => v ??
+   "pending")` déjà établi. Un grep systématique de tous les `.default(` des quatre modules de
+   cette phase a confirmé qu'aucun autre cas similaire ne s'y cachait (les autres champs enum
+   sont tous rendus par un `<select>` toujours présent dans leur formulaire).
+
+**Volontairement reporté** : lecteur de QR par caméra intégré à l'app (le critère de sortie parle
+de "scan QR fonctionnel", pas d'une UI de scan dédiée — un appareil photo grand public ouvrant
+l'URL encodée remplit ce rôle ; une UI de scan in-app resterait une amélioration UX, pas une
+nécessité fonctionnelle) ; paiement des inscriptions payantes (`event_registrations.amount`/
+`payment_status` existent dans le schéma mais aucun `PaymentProvider` avant la Phase 14/Billing) ;
+vue calendrier en grille mensuelle (l'agenda chronologique suffit à prouver l'agrégation) ;
+liste d'attente automatique quand `capacity` est atteinte (`waitlisted` existe comme statut
+possible mais n'est pas positionné automatiquement).

@@ -2,11 +2,13 @@
 
 > Reflète le schéma réel (`db/schema.sql`). Voir [02-database-schema.md](02-database-schema.md)
 > pour le contexte du pivot. Catalogue de permissions **réduit** par rapport au design initial du
-> STEP 01 (29 codes contre ~90) — c'est ce qui est réellement seedé en base. Ajouté en Phase 6 :
+> STEP 01 (49 codes contre ~90) — c'est ce qui est réellement seedé en base. Ajouté en Phase 6 :
 > `pastoral.view_confidential` pour le durcissement RLS de la confidentialité pastorale — voir
 > [03-multi-tenancy-and-rls.md](03-multi-tenancy-and-rls.md#confidentialité-pastorale-durcie-en-phase-6)
-> — ainsi que `visits.*` et `pastoral_council.*`, absents du catalogue jusqu'ici bien que les
-> tables existent depuis le schéma initial.
+> — ainsi que `visits.*` et `pastoral_council.*`. Ajouté en Phase 7 :
+> `ministries.*`/`teams.*`/`workers.*`/`services.*`/`planning.*` (3 codes chacun). Ajouté en
+> Phase 8 : `registrations.*` et `calendar.*` (`events.*`/`attendance.*` existaient déjà dans le
+> schéma d'origine).
 
 ## Rôles
 
@@ -28,7 +30,7 @@
 `public.is_org_admin()` ne reconnaît que `SUPER_ADMIN`/`CHURCH_OWNER` comme "admin" (c'est ce qui
 détermine l'accès `delete` en RLS — voir [03-multi-tenancy-and-rls.md](03-multi-tenancy-and-rls.md)).
 
-## Catalogue de permissions (29 — `db/schema.sql` §21, table `permissions`)
+## Catalogue de permissions (49 — `db/schema.sql` §21, table `permissions`)
 
 ```text
 members.view       members.create       members.update       members.delete
@@ -37,18 +39,26 @@ pastoral.view_confidential
 prayer.view          prayer.create        prayer.update
 visits.view           visits.create        visits.update
 pastoral_council.view  pastoral_council.manage
+ministries.view        ministries.create     ministries.update
+teams.view              teams.create           teams.update
+workers.view             workers.create          workers.update
+services.view             services.create          services.update
+planning.view              planning.create           planning.update
 events.view           events.create        events.update        events.delete
 attendance.view        attendance.create
+registrations.view      registrations.create    registrations.update
+calendar.view             calendar.manage
 finance.view             finance.create        finance.approve
 reports.view              reports.export
 settings.manage
 ```
 
-Note : `prayer`, `visits` et `pastoral_council` n'ont pas de code `.delete` séparé — comme pour
-`pastoral`, la policy RLS `delete` générique exige `is_org_admin()` (voir plus bas), donc les
-"suppressions" pour ces modules sont soit un changement de statut couvert par `.update` (prière,
-visite), soit gardées explicitement par `check.context.isAdmin` en plus du `.manage` applicatif
-(réunions et participants du conseil pastoral — cascade réelle en base).
+Note : plusieurs modules n'ont pas de code `.delete` séparé — comme pour `pastoral`, la policy
+RLS `delete` générique exige `is_org_admin()` (voir plus bas), donc les "suppressions" pour ces
+modules sont soit un changement de statut couvert par `.update` (prière, visite, inscription),
+soit gardées explicitement par `check.context.isAdmin` en plus du `.manage`/`.update` applicatif
+(conseil pastoral, ministères, équipes, ouvriers, services, plannings, calendrier — cascade
+réelle en base).
 
 C'est **beaucoup plus grossier** que le catalogue détaillé imaginé au STEP 01
 (`members.export`/`import`, `pastoral.view.private`, `documents.view.all`, etc.) — celui-ci
