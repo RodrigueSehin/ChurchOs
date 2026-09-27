@@ -22,7 +22,7 @@ conservant l'architecture et les conventions de ce document.
 | **11. Communication** ✅ | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué — **livré, vérifié en conditions réelles** |
 | **12. Documents & Resources** ✅ | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés — **livré, vérifié en conditions réelles** |
 | **13. Analytics** ✅ | Dashboards enrichis, graphiques, rapports, exports PDF/Excel/CSV | Dashboard `/analytics` avec vraies agrégations SQL — **livré, vérifié en conditions réelles** |
-| **14. Billing** | Plans, abonnements, facturation, `PaymentProvider` (Stripe + abstraction) | Upgrade/downgrade de plan fonctionnel en sandbox Stripe |
+| **14. Billing** 🚧 | Plans, abonnements, facturation, `PaymentProvider` (Stripe + abstraction) | Upgrade/downgrade de plan fonctionnel en sandbox Stripe — **architecture livrée, vérification live en attente d'une clé API Stripe** |
 | **15. ChurchOS AI** | AI Assistant, AI Reports, AI Communication, AI Pastoral Assistant, AI Analytics | Filtrage par permission vérifié (voir §AI data filtering) |
 | **16. Production** | Tests (Vitest/Playwright), sécurité, monitoring (Sentry/PostHog), performance, SEO, CI/CD, documentation | Déploiement Vercel + Supabase, CI verte |
 
@@ -973,3 +973,87 @@ plus demandés (membres, présence, finances), d'autres modules (ministères, fo
 communication) pourront s'ajouter à `features/reports/queries` sans changement d'architecture ;
 planification d'envoi automatique d'un rapport par email (nécessiterait Inngest, prévu pour une
 phase ultérieure, combiné à l'intégration Resend déjà en place depuis la Phase 11).
+
+**PHASE 14 — Billing** 🚧 : architecture complète livrée (2026-09-27), mais le critère de sortie
+explicite (upgrade/downgrade de plan fonctionnel en sandbox Stripe) **n'a pas pu être vérifié en
+conditions réelles** — l'utilisateur a explicitement choisi de faire construire l'architecture
+d'abord plutôt que de fournir une clé API Stripe immédiatement (voir la question posée en début
+de phase). Contrairement à toutes les phases précédentes, celle-ci ne peut donc pas être marquée
+✅ tant qu'une clé `STRIPE_SECRET_KEY` (mode test, `sk_test_...`) n'aura pas été fournie et le
+flux rejoué en direct.
+
+Livré :
+- **Abstraction `PaymentProvider`** (critère de contenu explicite, `lib/payments/types.ts`) : tout
+  le reste de l'application (Server Actions, UI) dépend uniquement de cette interface — seul
+  `lib/payments/stripe-provider.ts` importe le SDK `stripe`. Un futur second fournisseur (ex.
+  CinetPay, plus courant en Afrique de l'Ouest pour les paiements locaux que Stripe) n'aurait qu'à
+  implémenter la même interface. Client Stripe paresseux (même motif que `lib/email/resend.ts` en
+  Phase 11) : `STRIPE_SECRET_KEY` n'est lue qu'au premier appel réel, jamais au chargement du
+  module, pour qu'un `npm run build` sans clé ne casse jamais — vérifié en conditions réelles
+  (voir plus bas).
+- **`/settings/billing`** (`features/billing/`) : carte d'abonnement actuel (plan, statut,
+  intervalle, fin de période — vraies données Postgres, pas un mock), sélecteur de plan (mensuel/
+  annuel, réutilise le style visuel de l'étape "Abonnement" de l'onboarding) avec trois issues
+  possibles selon le contexte — passage au plan FREE (annule l'abonnement Stripe s'il existe,
+  aucun paiement à collecter), changement direct d'un abonnement Stripe déjà actif
+  (`subscriptions.update`, proratisé, sans nouveau paiement), ou première souscription payante
+  (redirection vers une Session Checkout Stripe hébergée). Tableau de factures alimenté en direct
+  depuis l'API Stripe (`invoices.list`), pas depuis une table locale synchronisée par webhook —
+  décision délibérée pour ne pas dépendre d'un webhook non vérifiable localement (voir plus bas).
+- **Aucune colonne ajoutée au schéma** : les identifiants de Prix Stripe par plan
+  (`stripePriceIdMonthly`/`stripePriceIdYearly`) sont stockés dans `plans.features` (jsonb, déjà
+  utilisé pour la matrice de fonctionnalités depuis `db/scripts/seed-plan-features.ts`) plutôt que
+  d'ajouter des colonnes dédiées — même instinct "utiliser ce qui existe déjà" que le statut de
+  budget en Phase 9. `db/scripts/setup-stripe-billing.ts` (nouveau script idempotent, committé,
+  pas jetable) créera les Produits/Prix Stripe pour STARTER et PRO (FREE gratuit, ENTERPRISE "sur
+  devis" — voir Phase 3) dès qu'une clé sera fournie ; il refuse volontairement toute clé qui ne
+  commence pas par `sk_test_`, pour ne jamais pouvoir toucher un compte Stripe live par erreur.
+- **Traduction des statuts Stripe → `public.subscription_status`** (`mapStripeStatus`,
+  `features/billing/schemas`) : Stripe utilise sa propre orthographe et ses propres valeurs
+  (`canceled` en anglais américain, plus `incomplete`/`incomplete_expired`/`unpaid` qui n'existent
+  pas dans notre enum réel `trialing`/`active`/`past_due`/`cancelled`/`paused`/`expired`) — un
+  détail qui, non traité, aurait fait échouer silencieusement toute écriture avec une valeur hors
+  enum. Repéré et corrigé à l'écriture du code, pas en test (aucune clé Stripe disponible pour le
+  déclencher live).
+- **Webhook préparé mais non vérifiable** (`/api/webhooks/stripe`, vérifie la signature via
+  `STRIPE_WEBHOOK_SECRET`, utilise le client admin Supabase — légitime ici comme pour le scan QR
+  de la Phase 8, Stripe appelant sans session utilisateur) : Stripe ne peut pas atteindre
+  `localhost` sans tunnel public ou Stripe CLI, ni l'un ni l'autre disponibles dans cet
+  environnement. Le critère de sortie repose donc sur le flux **synchrone**
+  (`syncCheckoutSession`, appelé au retour de la page de paiement hébergée via
+  `?session_id=...`) plutôt que sur ce webhook — même contournement, même raisonnement que le
+  statut livré/échoué de Resend en Phase 11 (interroger l'état directement plutôt que d'attendre
+  une notification asynchrone impossible à recevoir localement).
+
+**Vérifié en conditions réelles, dans la limite de ce qui ne nécessite pas de clé Stripe**
+(organisation de test dédiée avec un abonnement FREE/`trialing` initial, comme le ferait
+`finalizeOnboarding`, nettoyée après) :
+- La page `/settings/billing` affiche les vraies données de l'abonnement (Plan Free, statut
+  Essai, facturation mensuelle) sans planter en l'absence de `STRIPE_SECRET_KEY`.
+- **Dégradation propre confirmée** : les plans Starter et Pro (sans identifiant de Prix Stripe
+  configuré) affichent un bouton "Indisponible" désactivé plutôt que de permettre un clic qui
+  échouerait — le message d'erreur défensif de `changePlan` ("plan pas encore configuré") reste
+  une seconde ligne de défense côté serveur, non déclenchée par ce test précis puisque l'UI
+  empêche déjà le clic.
+- Le tableau des factures affiche correctement l'état vide ("Aucune facture") en l'absence de
+  client Stripe.
+- **Isolation vérifiée** : un compte `SECRETARY` (sans `settings.manage`, seul code qui gate cette
+  page — aucun nouveau code de permission ajouté cette phase, `settings.manage` existait déjà et
+  gate déjà les pages sœurs `/settings/church`/`/settings/users`/`/settings/roles`) reçoit "Accès
+  refusé (`settings.manage`)".
+
+**Non vérifié, en attente d'une clé `STRIPE_SECRET_KEY`** : création réelle d'un client Stripe,
+redirection vers une Session Checkout hébergée, paiement en sandbox (carte de test Stripe
+`4242 4242 4242 4242`), retour et synchronisation via `syncCheckoutSession`, changement direct
+d'un plan payant vers un autre (proratisation), annulation d'un abonnement Stripe réel, affichage
+d'une vraie facture Stripe. **Prochaine étape dès qu'une clé sera fournie** : exécuter
+`npm run db:setup-stripe-billing`, puis rejouer l'intégralité du parcours upgrade/downgrade en
+direct avant de marquer cette phase ✅.
+
+**Volontairement reporté** : moyens de paiement mobiles ouest-africains (Orange Money, MTN Money,
+Wave — hors du périmètre de l'abstraction `PaymentProvider` actuelle, qui n'a qu'une implémentation
+Stripe ; un futur `CinetPayProvider` pourrait s'y greffer sans toucher aux Server Actions) ;
+gestion fine des moyens de paiement enregistrés (Stripe Customer Portal, pas construit en interne
+— le Portail client hébergé de Stripe couvrirait cela sans code supplémentaire une fois la clé
+disponible) ; alertes automatiques de paiement en retard (nécessiterait le webhook, non vérifiable
+localement).

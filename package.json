@@ -14,6 +14,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed/index.ts",
     "db:seed-plan-features": "tsx db/scripts/seed-plan-features.ts",
+    "db:setup-stripe-billing": "tsx db/scripts/setup-stripe-billing.ts",
     "db:local": "tsx db/local-postgres/index.ts"
   },
   "dependencies": {
@@ -42,6 +43,7 @@
     "recharts": "^3.10.1",
     "resend": "^6.30.0",
     "server-only": "^0.0.1",
+    "stripe": "^22.6.2",
     "tailwind-merge": "^2.6.0",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"

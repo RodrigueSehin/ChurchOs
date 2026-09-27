@@ -19,7 +19,9 @@
 > `resources.reserve` (catalogue 56 → 61 codes) — aucun code `documents.*`/`resources.*` n'existait
 > avant cette phase. **Phase 13 : aucun code ajouté** — `reports.view`/`reports.export`
 > existaient déjà dans le schéma d'origine et étaient déjà correctement distribués par rôle ;
-> catalogue toujours à 61 codes.
+> catalogue toujours à 61 codes. **Phase 14 : aucun code ajouté** — `/settings/billing` réutilise
+> `settings.manage`, déjà utilisé par les pages sœurs `/settings/church`/`/settings/users`/
+> `/settings/roles` ; catalogue toujours à 61 codes.
 
 ## Rôles
 
