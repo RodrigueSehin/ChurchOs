@@ -14,7 +14,10 @@
 > 49 codes. Ajouté en Phase 10 : `training.view`/`training.manage`/`training.enroll`/
 > `training.certify` (catalogue 49 → 53 codes) — aucun code `training.*` n'existait avant cette
 > phase. Ajouté en Phase 11 : `communication.view`/`communication.manage`/`communication.send`
-> (catalogue 53 → 56 codes) — aucun code `communication.*` n'existait avant cette phase.
+> (catalogue 53 → 56 codes) — aucun code `communication.*` n'existait avant cette phase. Ajouté en
+> Phase 12 : `documents.view`/`documents.manage`/`resources.view`/`resources.manage`/
+> `resources.reserve` (catalogue 56 → 61 codes) — aucun code `documents.*`/`resources.*` n'existait
+> avant cette phase.
 
 ## Rôles
 

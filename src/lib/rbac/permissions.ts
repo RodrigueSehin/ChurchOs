@@ -84,6 +84,11 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "communication.view", name: "Voir les communications", module: "communication", description: "Consulter les annonces, modèles et l'historique d'envoi" },
   { code: "communication.manage", name: "Gérer les communications", module: "communication", description: "Créer/modifier les annonces et les modèles de message" },
   { code: "communication.send", name: "Envoyer des messages", module: "communication", description: "Composer et envoyer une campagne de messages" },
+  { code: "documents.view", name: "Voir les documents", module: "documents", description: "Consulter les dossiers et documents" },
+  { code: "documents.manage", name: "Gérer les documents", module: "documents", description: "Créer des dossiers, téléverser et supprimer des documents" },
+  { code: "resources.view", name: "Voir les salles et équipements", module: "resources", description: "Consulter les salles, équipements et véhicules" },
+  { code: "resources.manage", name: "Gérer les salles et équipements", module: "resources", description: "Créer/modifier les salles, équipements et véhicules" },
+  { code: "resources.reserve", name: "Réserver une ressource", module: "resources", description: "Créer et gérer une réservation de salle ou d'équipement" },
   { code: "settings.manage", name: "Gérer les paramètres", module: "settings", description: "Administrer ChurchOS" },
 ];
 
@@ -129,6 +134,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "training.enroll",
     "training.certify",
     "communication.view",
+    "documents.view",
+    "resources.view",
+    "resources.reserve",
   ),
 
   MINISTRY_LEADER: only(
@@ -161,6 +169,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "reports.view",
     "training.view",
     "communication.view",
+    "documents.view",
+    "resources.view",
+    "resources.reserve",
   ),
 
   FINANCE_MANAGER: only(
@@ -191,6 +202,11 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "communication.view",
     "communication.manage",
     "communication.send",
+    "documents.view",
+    "documents.manage",
+    "resources.view",
+    "resources.manage",
+    "resources.reserve",
   ),
 
   WORKER: only(
@@ -205,6 +221,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "training.view",
     "training.enroll",
     "communication.view",
+    "documents.view",
+    "resources.view",
+    "resources.reserve",
   ),
 
   MEMBER: only(
@@ -214,5 +233,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "training.view",
     "training.enroll",
     "communication.view",
+    "documents.view",
+    "resources.view",
+    "resources.reserve",
   ),
 };

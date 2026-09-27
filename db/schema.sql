@@ -1786,6 +1786,11 @@ insert into public.permissions (code, name, module, description) values
 ('communication.view','Voir les communications','communication','Consulter les annonces, modèles et l''historique d''envoi'),
 ('communication.manage','Gérer les communications','communication','Créer/modifier les annonces et les modèles de message'),
 ('communication.send','Envoyer des messages','communication','Composer et envoyer une campagne de messages'),
+('documents.view','Voir les documents','documents','Consulter les dossiers et documents'),
+('documents.manage','Gérer les documents','documents','Créer des dossiers, téléverser et supprimer des documents'),
+('resources.view','Voir les salles et équipements','resources','Consulter les salles, équipements et véhicules'),
+('resources.manage','Gérer les salles et équipements','resources','Créer/modifier les salles, équipements et véhicules'),
+('resources.reserve','Réserver une ressource','resources','Créer et gérer une réservation de salle ou d''équipement'),
 ('settings.manage','Gérer les paramètres','settings','Administrer ChurchOS')
 on conflict (code) do nothing;
 
@@ -1821,6 +1826,66 @@ grant usage on schema public to anon, authenticated;
 grant select on public.plans, public.feature_flags, public.permissions to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
+
+-- =========================================================
+-- 23. STORAGE (Phase 12 — Documents)
+-- =========================================================
+
+-- Bucket privé (jamais public) — chaque objet est stocké sous
+-- `<organization_id>/<uuid>-<nom_fichier>`, ce qui permet aux policies ci-dessous de retrouver
+-- l'organisation directement depuis le chemin, sans table de correspondance supplémentaire.
+-- `allowed_mime_types` est le contrôle "types de fichiers contrôlés" du critère de sortie de
+-- cette phase, appliqué par Supabase Storage lui-même (en plus de la validation Zod côté
+-- application) — un type hors de cette liste est rejeté par l'API Storage avant même d'atteindre
+-- le bucket.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'churchos-documents',
+  'churchos-documents',
+  false,
+  26214400, -- 25 Mo
+  array[
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    'text/csv',
+    'image/png',
+    'image/jpeg',
+    'image/webp'
+  ]
+)
+on conflict (id) do update set
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+-- Même posture que les tables `public.*` (`is_org_member` en lecture/écriture, `is_org_admin` en
+-- suppression) — voir la boucle générique §20 — appliquée ici à `storage.objects` puisque RLS sur
+-- ce bucket ne peut pas référencer une colonne `organization_id` classique.
+drop policy if exists documents_storage_select_org on storage.objects;
+create policy documents_storage_select_org on storage.objects
+for select using (
+  bucket_id = 'churchos-documents'
+  and public.is_org_member((storage.foldername(name))[1]::uuid)
+);
+
+drop policy if exists documents_storage_insert_org on storage.objects;
+create policy documents_storage_insert_org on storage.objects
+for insert with check (
+  bucket_id = 'churchos-documents'
+  and public.is_org_member((storage.foldername(name))[1]::uuid)
+);
+
+drop policy if exists documents_storage_delete_org on storage.objects;
+create policy documents_storage_delete_org on storage.objects
+for delete using (
+  bucket_id = 'churchos-documents'
+  and public.is_org_admin((storage.foldername(name))[1]::uuid)
+);
 
 -- =========================================================
 -- END

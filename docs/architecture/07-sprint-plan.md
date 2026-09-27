@@ -20,7 +20,7 @@ conservant l'architecture et les conventions de ce document.
 | **9. Finance** ✅ | Dons/offrandes, dépenses, budgets, rapports financiers, flux d'approbation | Permissions finance strictement isolées (test RLS dédié) — **livré, vérifié en conditions réelles** |
 | **10. Training** ✅ | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil — **livré, vérifié en conditions réelles** |
 | **11. Communication** ✅ | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué — **livré, vérifié en conditions réelles** |
-| **12. Documents & Resources** | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés |
+| **12. Documents & Resources** ✅ | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés — **livré, vérifié en conditions réelles** |
 | **13. Analytics** | Dashboards enrichis, graphiques, rapports, exports PDF/Excel/CSV | Dashboard `/analytics` avec vraies agrégations SQL |
 | **14. Billing** | Plans, abonnements, facturation, `PaymentProvider` (Stripe + abstraction) | Upgrade/downgrade de plan fonctionnel en sandbox Stripe |
 | **15. ChurchOS AI** | AI Assistant, AI Reports, AI Communication, AI Pastoral Assistant, AI Analytics | Filtrage par permission vérifié (voir §AI data filtering) |
@@ -797,3 +797,101 @@ peu de valeur avant qu'un système de notifications automatiques déclenchées p
 réellement, prévu pour une phase ultérieure) ; audience ciblée par filtre (statut, groupe,
 ministère...) — la sélection de destinataires reste une liste de cases à cocher individuelles,
 `recipient_filter`/`audience_filter` (jsonb) restent au repos pour de futurs filtres démographiques.
+
+**PHASE 12 — Documents & Resources** ✅ : livrée et vérifiée de bout en bout en conditions réelles
+(2026-09-27), y compris le critère de sortie explicite (upload Supabase Storage sécurisé, types de
+fichiers contrôlés).
+
+Livré — deux modules distincts, chacun sa propre entrée de navigation :
+- **Documents** (`features/documents/`, `/documents`) : arborescence de dossiers (`document_folders`,
+  navigation par `?folderId=`, pas de breadcrumb complet — un simple lien "Retour" vers le parent,
+  suffisant pour une profondeur de dossiers réaliste dans une église) et fichiers (`documents`).
+  Téléversement réel vers un bucket Supabase Storage privé (`churchos-documents`, créé cette
+  phase), téléchargement via URL signée de 5 minutes (`createSignedUrl`, jamais un accès public
+  direct), suppression admin-only qui retire l'objet Storage avant la ligne DB (pas l'inverse — un
+  échec de suppression Storage doit laisser la ligne DB intacte plutôt que de pointer vers un
+  fichier fantôme).
+- **Salles & équipements** (`features/resources/`, `/resources`) : ressources typées
+  (salle/équipement/véhicule/autre, avec quantité et statut disponible/maintenance/retiré) sur une
+  page à lignes dépliables (même motif que les annonces en Phase 11), chaque ligne exposant un
+  panneau de réservations (`resource_reservations`) avec création et changement de statut inline.
+- **Deux couches de contrôle des types de fichiers** (le critère de sortie explicite) : validation
+  Zod/applicative immédiate (message d'erreur clair sans même toucher le réseau) **et**
+  `allowed_mime_types` sur le bucket lui-même (Supabase Storage rejette un type hors liste avant
+  même d'atteindre le disque) — la seconde couche protège contre un client qui contournerait la
+  première (requête directe à l'API Storage, par exemple), pas seulement contre une erreur
+  d'utilisateur. Whitelist volontairement restreinte : PDF, Word, Excel, PowerPoint, texte, CSV,
+  images — pas de type exécutable ou de script.
+- **Visibilité restreinte à ce qui a un sens réel** : `document_visibility` (schéma réel) propose
+  aussi `campus`/`public`, mais ni `documents` ni `document_folders` n'ont de colonne `campus_id`
+  pour donner un sens à `campus`, et il n'existe aucune route publique non authentifiée pour donner
+  un sens à `public` — les exposer aurait créé des options qui ne font rien de plus que
+  `organization`. Seules `private` (auteur + admins) et `organization` (tous les membres) sont
+  proposées dans les formulaires ; les deux autres valeurs restent valides en base, simplement
+  inatteignables depuis cette UI — décision documentée directement dans
+  `features/documents/schemas`.
+- **Détection de conflit de réservation tenant compte de la quantité** — contrairement à la
+  détection de conflits de planning (Phase 7), binaire (un ouvrier a une quantité implicite de 1),
+  une ressource peut avoir `quantity > 1` (ex. 10 chaises, 3 vidéoprojecteurs) : `createReservation`
+  compte les réservations non annulées qui chevauchent le créneau demandé et rejette seulement
+  quand ce compte atteint la quantité disponible, avec un message donnant le compte exact
+  (`"2/2 déjà réservée(s)"`).
+- **Cinq nouveaux codes de permission** (`documents.view/manage`, `resources.view/manage/reserve` —
+  catalogue 56 → **61 codes**) : `documents.manage` couvre dossiers et fichiers ensemble (une seule
+  autorité d'auteur, comme `training.manage` en Phase 10) ; `resources.manage` (créer/modifier une
+  ressource) est séparé de `resources.reserve` (réserver une ressource existante) parce qu'un
+  membre ordinaire doit pouvoir réserver une salle sans avoir le droit d'en créer une — même
+  logique de séparation que `training.enroll`/`training.manage`. `SECRETARY` reçoit les cinq ;
+  `PASTORAL_LEADER`/`MINISTRY_LEADER`/`WORKER`/`MEMBER` reçoivent `documents.view` +
+  `resources.view` + `resources.reserve` (visibilité + auto-réservation, jamais `.manage`).
+  Migration de catalogue préparée par l'agent, **appliquée par l'utilisateur** via le SQL Editor
+  Supabase (même contrainte que toutes les phases précédentes).
+- **Bucket Storage et policies RLS sur `storage.objects`, préparés par l'agent et appliqués par
+  l'utilisateur** — une première depuis la Phase 3 (RLS sur les tables `public.*`) : la sensibilité
+  de sécurité (qui peut lire/écrire/supprimer un fichier) a été traitée avec la même prudence que
+  les policies de confidentialité pastorale, pas comme un simple ajout de catalogue. Convention de
+  chemin `<organization_id>/<uuid>-<nom_fichier>` : chaque policy (`select`/`insert` par
+  `is_org_member`, `delete` par `is_org_admin` — même posture que la boucle générique des tables
+  `public.*`) extrait l'organisation via `(storage.foldername(name))[1]::uuid`, sans table de
+  correspondance supplémentaire.
+
+**Vérifié en conditions réelles** (organisation de test dédiée, nettoyée après — y compris l'objet
+Storage lui-même, supprimé explicitement avant la suppression de l'organisation puisqu'un
+`DELETE CASCADE` Postgres ne touche jamais au contenu réel d'un bucket) :
+- Dossier créé, navigation dans le sous-dossier confirmée (`?folderId=`, lien "Retour" fonctionnel).
+- **Upload réel** d'un fichier `.txt` vers le bucket `churchos-documents` — confirmé par le chemin
+  retourné (`<organizationId>/<uuid>-test-document.txt`) et par la taille affichée.
+- **Téléchargement réel** via URL signée : le lien généré (`.../object/sign/churchos-documents/...
+  ?token=...`) a été ouvert dans un nouvel onglet et a retourné le contenu exact du fichier.
+- **Rejet réel d'un type non autorisé** : un fichier `.js` (contournant délibérément l'attribut
+  `accept` du champ, pour simuler un utilisateur qui l'ignore) a été refusé avec le message "Type
+  de fichier non autorisé", sans jamais atteindre Supabase Storage — confirmant que la validation
+  applicative intercepte avant l'appel réseau.
+- Ressource "Salle polyvalente" créée (quantité 1), réservation créée (10h-12h) ; une seconde
+  tentative de réservation chevauchante (11h-13h) refusée avec `"Aucune unité disponible sur ce
+  créneau (1/1 déjà réservée(s))."` — confirmant la détection de conflit tenant compte de la
+  quantité.
+- **Isolation à deux niveaux** (Playwright, deux comptes distincts) : `FINANCE_MANAGER` (aucun code
+  `documents.*`/`resources.*`) reçoit "Accès refusé" sur les deux pages entières. `MINISTRY_LEADER`
+  (`documents.view` + `resources.view` + `resources.reserve`, sans aucun `.manage`) voit
+  normalement les deux pages (dossier existant visible, ressource existante visible) mais sans
+  aucun bouton de création/modification/suppression ; le bouton "Réserver" reste disponible et
+  fonctionnel, et la réservation d'un tiers s'affiche en lecture seule (badge de statut) plutôt
+  qu'avec un menu déroulant modifiable — confirmant que la distinction `.manage` vs `.reserve` (et
+  la règle "modifiable seulement si c'est la sienne") fonctionne réellement, pas seulement en
+  théorie.
+
+**Aucun bug applicatif trouvé pendant cette vérification** — une seconde fois depuis la Phase 10
+(la première étant la Phase 10 elle-même). La leçon des phases précédentes sur les champs enum à
+défaut (Phases 5/6/8/9) ne s'est pas représentée : `createReservation` ne prend aucun champ statut
+en entrée (`status: "pending"` fixé directement dans l'action, jamais lu du formulaire), évitant la
+classe de bug entière par construction plutôt qu'en la corrigeant après coup.
+
+**Volontairement reporté** : réordonnancement/déplacement de documents entre dossiers par
+glisser-déposer (déplacer un document reste possible en le supprimant et en le re-téléversant dans
+le bon dossier) ; aperçu de fichier intégré (le téléchargement ouvre l'URL signée dans un nouvel
+onglet, laissant le navigateur décider d'afficher ou de télécharger selon le type) ; réservation
+pour une autre personne qu'soi-même (`reserved_by_person_id` existe dans le schéma mais
+`createReservation` ne fixe que `reserved_by_user_id` — cohérent avec le motif d'auto-inscription
+déjà établi pour les cours en Phase 10 et les événements en Phase 8) ; galerie/aperçu miniature des
+images téléversées.
