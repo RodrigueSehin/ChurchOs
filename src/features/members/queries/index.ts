@@ -59,6 +59,26 @@ export async function getMembers({ organizationId, search, status, page = 1 }: M
   return { rows, total, page, pageSize: MEMBERS_PAGE_SIZE };
 }
 
+/** Liste complète (non paginée) pour l'export de rapports (`features/reports`) — jamais utilisée
+ * pour une page de liste normale, où `getMembers` (paginée) reste la bonne fonction. */
+export async function getAllMembersForExport(organizationId: string) {
+  return db
+    .select({
+      firstName: people.firstName,
+      lastName: people.lastName,
+      email: people.email,
+      phone: people.phone,
+      status: members.status,
+      membershipDate: members.membershipDate,
+      campusName: campuses.name,
+    })
+    .from(members)
+    .innerJoin(people, eq(people.id, members.personId))
+    .leftJoin(campuses, eq(campuses.id, people.campusId))
+    .where(eq(people.organizationId, organizationId))
+    .orderBy(asc(people.lastName), asc(people.firstName));
+}
+
 export async function getMemberDetail(organizationId: string, memberId: string) {
   const [row] = await db
     .select({

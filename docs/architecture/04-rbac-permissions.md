@@ -17,7 +17,9 @@
 > (catalogue 53 → 56 codes) — aucun code `communication.*` n'existait avant cette phase. Ajouté en
 > Phase 12 : `documents.view`/`documents.manage`/`resources.view`/`resources.manage`/
 > `resources.reserve` (catalogue 56 → 61 codes) — aucun code `documents.*`/`resources.*` n'existait
-> avant cette phase.
+> avant cette phase. **Phase 13 : aucun code ajouté** — `reports.view`/`reports.export`
+> existaient déjà dans le schéma d'origine et étaient déjà correctement distribués par rôle ;
+> catalogue toujours à 61 codes.
 
 ## Rôles
 

@@ -21,7 +21,7 @@ conservant l'architecture et les conventions de ce document.
 | **10. Training** ✅ | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil — **livré, vérifié en conditions réelles** |
 | **11. Communication** ✅ | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué — **livré, vérifié en conditions réelles** |
 | **12. Documents & Resources** ✅ | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés — **livré, vérifié en conditions réelles** |
-| **13. Analytics** | Dashboards enrichis, graphiques, rapports, exports PDF/Excel/CSV | Dashboard `/analytics` avec vraies agrégations SQL |
+| **13. Analytics** ✅ | Dashboards enrichis, graphiques, rapports, exports PDF/Excel/CSV | Dashboard `/analytics` avec vraies agrégations SQL — **livré, vérifié en conditions réelles** |
 | **14. Billing** | Plans, abonnements, facturation, `PaymentProvider` (Stripe + abstraction) | Upgrade/downgrade de plan fonctionnel en sandbox Stripe |
 | **15. ChurchOS AI** | AI Assistant, AI Reports, AI Communication, AI Pastoral Assistant, AI Analytics | Filtrage par permission vérifié (voir §AI data filtering) |
 | **16. Production** | Tests (Vitest/Playwright), sécurité, monitoring (Sentry/PostHog), performance, SEO, CI/CD, documentation | Déploiement Vercel + Supabase, CI verte |
@@ -895,3 +895,81 @@ pour une autre personne qu'soi-même (`reserved_by_person_id` existe dans le sch
 `createReservation` ne fixe que `reserved_by_user_id` — cohérent avec le motif d'auto-inscription
 déjà établi pour les cours en Phase 10 et les événements en Phase 8) ; galerie/aperçu miniature des
 images téléversées.
+
+**PHASE 13 — Analytics** ✅ : livrée et vérifiée de bout en bout en conditions réelles
+(2026-09-27), y compris le critère de sortie explicite (dashboard `/analytics` avec vraies
+agrégations SQL).
+
+**Aucun changement de schéma, de RLS ou de catalogue de permissions cette phase** — une première
+depuis la Phase 8 : `reports.view`/`reports.export` existaient déjà dans le schéma d'origine,
+déjà correctement distribués par rôle (voir `04-rbac-permissions.md`), et se sont révélés
+suffisants pour gater à la fois `/analytics` et `/reports`. L'utilisateur n'a eu aucun SQL à
+exécuter cette phase.
+
+Livré :
+- **`/analytics`** (`features/analytics/`) : quatre cartes KPI (membres actifs, nouveaux membres
+  sur 30 jours, présence moyenne récente, dons du mois) et quatre graphiques
+  (`recharts`, nouvelle dépendance) — croissance des membres par mois (barres), répartition des
+  membres par statut (anneau), tendance de présence sur les dernières sessions (ligne), finances
+  mensuelles recettes/dépenses (barres groupées). Toutes les agrégations sont de vraies requêtes
+  SQL via Drizzle (`features/analytics/queries`), aucune donnée statique.
+- **`/reports`** (`features/reports/`) : trois rapports exportables (membres, présence, finances),
+  chacun en CSV, Excel (`exceljs`, nouvelle dépendance) et PDF (`pdfkit`, nouvelle dépendance,
+  tableau dessiné manuellement — la bibliothèque n'a pas de composant tableau intégré). Un seul
+  Route Handler générique (`/api/reports/[type]`, `?format=csv|xlsx|pdf`) plutôt qu'un handler par
+  format : une réponse binaire téléchargeable ne peut pas être renvoyée par une Server Action,
+  seulement par un Route Handler (`NextResponse` + `Content-Disposition`), mais aucune opération
+  admin n'y intervient — uniquement `checkPermission()` avec le client authentifié habituel.
+- **Façades ajoutées pour respecter la règle de dépendances inter-modules**
+  (`01-project-structure.md`) : `features/reports/` ne connaissait ni les membres, ni la présence,
+  ni les finances avant cette phase — `features/members/services` (nouvelle fonction
+  `getAllMembersForExport`, liste complète non paginée, distincte de `getMembers` qui reste
+  paginée pour la page `/members`), `features/attendance/services` (nouvelle façade, réexporte
+  `getAttendanceSessions`) et `features/finance/services` (nouvelle façade, réexporte
+  `getFinanceReport`, déjà écrite en Phase 9) ont chacune été créées pour cette occasion.
+- **Isolation des données financières appliquée à trois endroits distincts, jamais sur
+  `reports.view`/`reports.export` seuls** — la leçon centrale de la Phase 9, reconduite trois
+  fois dans cette seule phase : la carte KPI "Dons du mois" et le graphique "Finances mensuelles"
+  sur `/analytics` sont conditionnés sur `finance.view` ; la carte "Rapport financier" sur
+  `/reports` n'apparaît que si `finance.view` est présent ; et le Route Handler lui-même revérifie
+  `finance.view` indépendamment de l'UI avant de générer le rapport financier (défense en
+  profondeur — un accès direct à l'URL sans passer par la carte masquée est refusé tout autant).
+
+Vérifié en conditions réelles (organisation de test dédiée avec données saisies à la main pour
+que chaque nombre affiché soit vérifiable — 6 membres à statuts et dates d'adhésion étalés sur 5
+mois, 2 sessions de présence à 4 et 6 présents, 5 transactions financières réparties sur 2 mois) :
+- **Chaque valeur du dashboard confirmée exacte** : "Membres actifs" (5, soit 6 membres moins 1
+  inactif), "Nouveaux membres (30j)" (1, seul le membre du mois courant), "Présence moyenne
+  récente" ((4+6)/2 = 5), "Dons du mois" (150 000 + 80 000 = 230 000 F CFA) ; le graphique de
+  croissance affichait la bonne répartition mensuelle (1/1/1/2/1 sur mai→sept, correspondant
+  exactement aux dates d'adhésion saisies) ; le graphique de présence affichait bien 4 puis 6.
+- **Chaque export vérifié octet par octet** (récupéré via `fetch()` dans la page plutôt que par un
+  clic, pour inspecter directement le contenu) : le CSV membres contenait les 6 lignes avec les
+  bons accents (grâce au BOM UTF-8 préfixé) ; le fichier Excel (6880 octets) avait le bon type
+  MIME `spreadsheetml.sheet` ; le PDF (1805 octets) commençait par l'en-tête `%PDF-` valide ; le
+  CSV présence affichait "4" et "6" présents par session ; le CSV finance affichait "350000.00"
+  de recettes et "105000.00" de dépenses (sommes exactes des transactions saisies, cumulées
+  depuis le 1er janvier).
+- **Isolation vérifiée à trois niveaux** (Playwright, deux comptes distincts) : `WORKER` (aucun
+  code `reports.*`) reçoit "Accès refusé (`reports.view`)" sur `/analytics` et "Accès refusé
+  (`reports.export`)" sur `/reports` — isolation de page complète. `MINISTRY_LEADER`
+  (`reports.view`/`reports.export` mais pas `finance.view`) voit `/analytics` sans la carte KPI
+  "Dons du mois" ni le graphique "Finances mensuelles", et voit `/reports` sans la carte "Rapport
+  financier" — isolation au niveau du widget. Un appel direct à
+  `/api/reports/finance?format=csv` depuis ce même compte (contournant délibérément l'UI) a
+  renvoyé une 403 JSON `{"error":"Accès refusé (finance.view)."}` — confirmant que le Route
+  Handler ne fait pas confiance à l'UI masquée, il revérifie réellement.
+
+**Aucun bug applicatif trouvé pendant cette vérification** — une troisième fois consécutive
+(Phases 10, 12, et maintenant 13). Les leçons accumulées (motif `.nullish()` pour les champs
+optionnels, séparation `finance.view`/`reports.view` pour toute donnée financière agrégée,
+conversion des dates en paramètres plutôt qu'en fragments `sql` interpolés) ont toutes été
+appliquées dès l'écriture du code plutôt que découvertes en testant.
+
+**Volontairement reporté** : dashboards personnalisables (widgets réordonnables/masquables par
+utilisateur) ; export direct des graphiques `/analytics` en image ; rapports personnalisés
+(constructeur de requête ad hoc) — les trois rapports de cette phase couvrent les modules les
+plus demandés (membres, présence, finances), d'autres modules (ministères, formations,
+communication) pourront s'ajouter à `features/reports/queries` sans changement d'architecture ;
+planification d'envoi automatique d'un rapport par email (nécessiterait Inngest, prévu pour une
+phase ultérieure, combiné à l'intégration Resend déjà en place depuis la Phase 11).

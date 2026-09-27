@@ -6,3 +6,4 @@ import "server-only";
  * docs/architecture/01-project-structure.md).
  */
 export { getPeopleForSelect, getPeopleWithEmailForSelect } from "@/features/members/queries/people";
+export { getAllMembersForExport } from "@/features/members/queries";
