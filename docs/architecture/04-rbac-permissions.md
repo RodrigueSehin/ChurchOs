@@ -8,7 +8,10 @@
 > — ainsi que `visits.*` et `pastoral_council.*`. Ajouté en Phase 7 :
 > `ministries.*`/`teams.*`/`workers.*`/`services.*`/`planning.*` (3 codes chacun). Ajouté en
 > Phase 8 : `registrations.*` et `calendar.*` (`events.*`/`attendance.*` existaient déjà dans le
-> schéma d'origine).
+> schéma d'origine). **Phase 9 : aucun code ajouté** — `finance.view`/`finance.create`/
+> `finance.approve` existaient déjà dans le schéma d'origine, jamais utilisés avant cette phase,
+> et déjà correctement réservés à `FINANCE_MANAGER` dans `ROLE_PERMISSIONS` ; catalogue toujours à
+> 49 codes.
 
 ## Rôles
 

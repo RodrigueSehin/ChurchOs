@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "db:migrate:local": "tsx db/scripts/migrate-local.ts",
     "db:verify-rls": "tsx db/scripts/verify-rls.ts",
+    "db:verify-finance-rls": "tsx db/scripts/verify-finance-rls.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed/index.ts",
     "db:seed-plan-features": "tsx db/scripts/seed-plan-features.ts",

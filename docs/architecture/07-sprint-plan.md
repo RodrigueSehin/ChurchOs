@@ -17,7 +17,7 @@ conservant l'architecture et les conventions de ce document.
 | **6. Pastoral** ✅ | Suivi pastoral, sujets de prière (confidentialité), visites, conseil pastoral | Confidentialité `PRIVATE` vérifiée par test E2E — **livré, vérifié en conditions réelles** |
 | **7. Ministries** ✅ | Ministères, équipes, ouvriers, services, planning | Affectation + détection de conflits de planning — **livré, vérifié en conditions réelles** |
 | **8. Events** ✅ | Événements, inscriptions (+ QR code), présences, calendrier agrégé | Scan QR fonctionnel, calendrier agrège tous les modules pertinents — **livré, vérifié en conditions réelles** |
-| **9. Finance** | Dons/offrandes, dépenses, budgets, rapports financiers, flux d'approbation | Permissions finance strictement isolées (test RLS dédié) |
+| **9. Finance** ✅ | Dons/offrandes, dépenses, budgets, rapports financiers, flux d'approbation | Permissions finance strictement isolées (test RLS dédié) — **livré, vérifié en conditions réelles** |
 | **10. Training** | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil |
 | **11. Communication** | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué |
 | **12. Documents & Resources** | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés |
@@ -520,3 +520,88 @@ nécessité fonctionnelle) ; paiement des inscriptions payantes (`event_registra
 vue calendrier en grille mensuelle (l'agenda chronologique suffit à prouver l'agrégation) ;
 liste d'attente automatique quand `capacity` est atteinte (`waitlisted` existe comme statut
 possible mais n'est pas positionné automatiquement).
+
+**PHASE 9 — Finance** ✅ : livrée et vérifiée de bout en bout en conditions réelles (2026-09-27),
+y compris le critère de sortie explicite (permissions finance strictement isolées, prouvé par un
+test RLS dédié).
+
+Livré — un seul module `features/finance/` couvrant quatre pages :
+- **Configuration** (`FinanceSetupManager`, dialogue partagé depuis `/finance/income` et
+  `/finance/expenses`) : catégories (typées recette/dépense/transfert), fonds (avec indicateur
+  "restreint"), comptes financiers (caisse/banque/mobile money/autre) — trois sections empilées,
+  chacune son propre formulaire `useActionState`.
+- **Dons & offrandes** (`/finance/income`) et **Dépenses** (`/finance/expenses`) : même
+  `TransactionFormDialog` partagé via une prop `type` (+ champ caché), liste avec montants
+  signés et colorés (vert/rouge), suppression réservée aux admins (hard delete, même motif établi
+  dans les phases précédentes pour les tables sans policy RLS `delete` pour un simple membre).
+- **Budgets** (`/finance/budgets`) : budgets annuels par exercice, avec lignes budgétaires
+  (catégorie/fonds, montant planifié, montant réel modifiable inline via `onBlur`) et un **flux
+  d'approbation** modélisé sur `budgets.status` (`draft` → `active` via `finance.approve`, puis
+  `active` → `closed`, toujours via `finance.approve`) — le schéma réel n'a pas de colonne
+  d'approbation sur `financial_transactions`, donc ce critère de sortie a été mappé sur la seule
+  notion d'approbation qui existe réellement dans `db/schema.sql` (le statut d'un budget), plutôt
+  que d'inventer une colonne.
+- **Rapports financiers** (`/finance/reports`) : recettes/dépenses agrégées par catégorie sur une
+  plage de dates filtrable (`sum()` Drizzle groupé par type+catégorie), total recettes/dépenses/
+  solde net.
+- **Aucun nouveau code de permission** : `finance.view`/`finance.create`/`finance.approve`
+  existaient déjà dans le catalogue depuis le schéma d'origine (23 codes), jamais utilisés avant
+  cette phase, et déjà correctement réservés à `FINANCE_MANAGER` (+ bypass admin) dans
+  `ROLE_PERMISSIONS` — catalogue toujours à 49 codes, une première depuis la Phase 6.
+
+**Test RLS dédié (critère de sortie explicite)** — `db/scripts/verify-finance-rls.ts`
+(`npm run db:verify-finance-rls`), même technique que `db:verify-rls` (`SET LOCAL ROLE
+authenticated` + `request.jwt.claim.sub`, ce que fait PostgREST/GoTrue en production) mais ciblée
+sur `financial_transactions` et `budgets` : insère un jeu de données financières minimal dans une
+organisation réelle (réutilise un `organization_memberships` actif existant), vérifie qu'un membre
+de cette organisation voit les lignes insérées, qu'un utilisateur membre d'aucune organisation ne
+voit rien, et qu'une requête sans session (aucun claim JWT) ne voit rien non plus — puis nettoie
+les lignes qu'il a créées, que le test réussisse ou échoue. **Résultat confirmé contre le vrai
+Supabase** : `✓ RLS financier confirmé`. Important à noter (documenté explicitement dans le script
+lui-même) : RLS dans ce schéma ne connaît que `organization_id`, jamais les permissions fines
+`finance.*` — ce test prouve donc l'isolation *inter-organisation*, pas une isolation par rôle à
+l'intérieur d'une même organisation, que RLS ne gère pas et n'a jamais géré ailleurs dans ce
+schéma.
+
+**Isolation applicative par rôle (l'autre moitié du critère de sortie, vérifiée par Playwright,
+navigateur réel)** — organisation de test dédiée, nettoyée après : un compte `CHURCH_OWNER` (admin)
+et un compte avec le rôle système `SECRETARY` (permissions réalistes seedées manuellement :
+`members.*`, `events.*`, `attendance.*`, `registrations.*`, `calendar.view`, `reports.view` —
+aucune permission `finance.*`, exactement la configuration `SECRETARY` réelle de
+`ROLE_PERMISSIONS`). Avec le compte admin : catégories/fonds/comptes créés, une recette (Dîmes,
+50 000 F CFA) et une dépense (Loyer, virement bancaire, 15 000 F CFA) créées et affichées
+correctement, budget "Budget annuel 2026" créé, une ligne budgétaire ajoutée (Loyer, 180 000 F CFA
+planifié), montant réel saisi (150 000 F CFA, mise à jour du total confirmée), budget approuvé
+(Brouillon → Actif) puis clôturé (Actif → Clôturé, boutons d'action disparaissant comme attendu) ;
+`/finance/reports` affichant les bons totaux (50 000 / 15 000 / 35 000 net) et la bonne ventilation
+par catégorie. Avec le compte secrétaire : les quatre pages finance (`/finance/income`,
+`/finance/expenses`, `/finance/budgets`, `/finance/reports`) affichent toutes "Accès refusé
+(`finance.view`)" ; `/members` reste accessible normalement pour le même compte — confirmant que
+c'est une isolation réelle et ciblée, pas un verrouillage général de session.
+
+**Bug réel trouvé et corrigé pendant cette vérification** — une nouvelle variante de la famille de
+bugs `FormData` déjà rencontrée aux Phases 5/6/8, mais cette fois-ci pas une histoire de `null` vs
+`undefined` : `transactionSchema.paymentMethod` utilisait `z.enum([...]).nullish().transform(v =>
+v ?? "")`, mais le `<select>` du formulaire de transaction rend une option "—" (moyen de paiement
+non précisé) dont la *valeur* est la chaîne vide `""`, pas une absence de champ — `z.enum` rejette
+`""` directement, avant même que `.nullish()` n'ait la moindre chance d'intervenir (`.nullish()` ne
+catche que `null`/`undefined`, jamais une chaîne hors énumération). Résultat concret : toute
+transaction créée sans préciser de moyen de paiement échouait avec `Invalid option: expected one
+of "cash"|"bank_transfer"|...`. Corrigé en remplaçant le champ par une simple chaîne optionnelle
+(`optionalString`, sans `z.enum()` au niveau Zod) — la vraie validation de l'énumération a lieu à
+l'insertion, portée par la colonne Postgres `payment_method` réellement typée en enum côté base.
+Un grep de tout `features/` a confirmé qu'aucune autre occurrence de ce même motif (`z.enum(...)
+.nullish()` sur un champ rendu par un `<select>` avec option vide) n'existait ailleurs.
+
+**Bug d'isolation trouvé pendant l'écriture du code, avant tout test** : `/finance/reports` était
+initialement gated par `reports.view` (le permission code générique déjà utilisé par `/reports`)
+plutôt que par `finance.view` — or `SECRETARY` et `MINISTRY_LEADER` ont tous deux `reports.view`
+sans avoir `finance.view`, ce qui aurait directement violé le critère de sortie de cette phase en
+exposant des totaux financiers agrégés à des rôles n'ayant pas accès aux finances. Corrigé avant
+tout test en re-gatant la page sur `finance.view`.
+
+**Volontairement reporté** : export PDF/Excel des rapports financiers (aucune infrastructure
+d'export avant la Phase 13/Analytics) ; rapprochement bancaire ou import de relevé ; gestion
+multi-devises (le schéma stocke un montant numérique simple, pas de colonne devise sur les
+transactions) ; historique des changements de statut d'un budget (seul le statut courant est
+stocké, pas un journal d'audit dédié).
