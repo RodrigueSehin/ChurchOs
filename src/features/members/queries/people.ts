@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { people } from "@/lib/db/schema";
@@ -15,4 +15,16 @@ export async function getPeopleForSelect(organizationId: string) {
     .orderBy(asc(people.lastName), asc(people.firstName))
     .limit(1000);
   return rows.map((p) => ({ id: p.id, name: `${p.firstName} ${p.lastName}` }));
+}
+
+/** Même liste, mais seulement les personnes ayant un email — pour peupler les cases à cocher de
+ * destinataires d'une campagne de communication (canal email uniquement cette phase). */
+export async function getPeopleWithEmailForSelect(organizationId: string) {
+  const rows = await db
+    .select({ id: people.id, firstName: people.firstName, lastName: people.lastName, email: people.email })
+    .from(people)
+    .where(and(eq(people.organizationId, organizationId), isNotNull(people.email), ne(people.email, "")))
+    .orderBy(asc(people.lastName), asc(people.firstName))
+    .limit(1000);
+  return rows.map((p) => ({ id: p.id, name: `${p.firstName} ${p.lastName}`, email: p.email! }));
 }

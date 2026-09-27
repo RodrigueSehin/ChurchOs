@@ -81,6 +81,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "training.manage", name: "Gérer les formations", module: "training", description: "Créer/modifier les cours et leurs modules" },
   { code: "training.enroll", name: "Gérer les inscriptions aux cours", module: "training", description: "Inscrire une personne à un cours, modifier statut/progression" },
   { code: "training.certify", name: "Délivrer des certifications", module: "training", description: "Émettre une certification pour une personne" },
+  { code: "communication.view", name: "Voir les communications", module: "communication", description: "Consulter les annonces, modèles et l'historique d'envoi" },
+  { code: "communication.manage", name: "Gérer les communications", module: "communication", description: "Créer/modifier les annonces et les modèles de message" },
+  { code: "communication.send", name: "Envoyer des messages", module: "communication", description: "Composer et envoyer une campagne de messages" },
   { code: "settings.manage", name: "Gérer les paramètres", module: "settings", description: "Administrer ChurchOS" },
 ];
 
@@ -125,6 +128,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "training.manage",
     "training.enroll",
     "training.certify",
+    "communication.view",
   ),
 
   MINISTRY_LEADER: only(
@@ -156,6 +160,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "calendar.manage",
     "reports.view",
     "training.view",
+    "communication.view",
   ),
 
   FINANCE_MANAGER: only(
@@ -183,6 +188,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "reports.view",
     "training.view",
     "training.enroll",
+    "communication.view",
+    "communication.manage",
+    "communication.send",
   ),
 
   WORKER: only(
@@ -196,7 +204,15 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "calendar.view",
     "training.view",
     "training.enroll",
+    "communication.view",
   ),
 
-  MEMBER: only("events.view", "registrations.create", "calendar.view", "training.view", "training.enroll"),
+  MEMBER: only(
+    "events.view",
+    "registrations.create",
+    "calendar.view",
+    "training.view",
+    "training.enroll",
+    "communication.view",
+  ),
 };

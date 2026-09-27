@@ -19,7 +19,7 @@ conservant l'architecture et les conventions de ce document.
 | **8. Events** ✅ | Événements, inscriptions (+ QR code), présences, calendrier agrégé | Scan QR fonctionnel, calendrier agrège tous les modules pertinents — **livré, vérifié en conditions réelles** |
 | **9. Finance** ✅ | Dons/offrandes, dépenses, budgets, rapports financiers, flux d'approbation | Permissions finance strictement isolées (test RLS dédié) — **livré, vérifié en conditions réelles** |
 | **10. Training** ✅ | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil — **livré, vérifié en conditions réelles** |
-| **11. Communication** | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué |
+| **11. Communication** ✅ | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué — **livré, vérifié en conditions réelles** |
 | **12. Documents & Resources** | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés |
 | **13. Analytics** | Dashboards enrichis, graphiques, rapports, exports PDF/Excel/CSV | Dashboard `/analytics` avec vraies agrégations SQL |
 | **14. Billing** | Plans, abonnements, facturation, `PaymentProvider` (Stripe + abstraction) | Upgrade/downgrade de plan fonctionnel en sandbox Stripe |
@@ -692,3 +692,108 @@ manuellement, pas calculé à partir d'un suivi module-par-module — `course_mo
 de progression par module dans le schéma réel) ; notification à la certification ou à
 l'expiration (`certifications.expires_at` existe et s'affiche mais ne déclenche rien, aucune
 infrastructure de job asynchrone avant la Phase 11/Inngest).
+
+**PHASE 11 — Communication** ✅ : livrée et vérifiée de bout en bout en conditions réelles
+(2026-09-27), y compris le critère de sortie explicite (un envoi réel via Resend en sandbox, avec
+statut livré/échoué confirmé en direct).
+
+Livré — un seul module `features/communication/` sur une seule page `/communication` à quatre
+onglets synchronisés par `?tab=` (même famille de motif que les rapports financiers filtrés par
+date en Phase 9, appliqué ici à une navigation par onglets plutôt qu'à un filtre) :
+- **Annonces** (`announcements`) : titre, contenu, statut (brouillon/planifiée/publiée/archivée),
+  fenêtre de publication/expiration optionnelle — liste avec ligne dépliable pour voir le
+  contenu complet, création/modification par dialogue, suppression admin-only (même contrainte
+  RLS `is_org_admin()` que les autres modules).
+- **Modèles** (`message_templates`) : nom, canal (email/SMS/WhatsApp — les trois sont proposés à
+  l'authoring, cohérent avec l'énoncé de cette phase), sujet et corps, variables libres
+  (`{{prenom}}`, stockées en `jsonb`). Seuls les modèles du canal **email** sont proposés dans
+  l'onglet Composer, seul canal réellement câblé à un fournisseur cette phase.
+- **Composer** (`messages` + `notifications`) : choix optionnel d'un modèle email (préremplit
+  sujet/contenu côté client), destinataires cochés parmi les personnes de l'organisation ayant un
+  email (`getPeopleWithEmailForSelect`, nouvelle fonction de la façade
+  `features/members/services`), envoi réel via Resend au clic — voir le détail plus bas.
+- **Historique** (`notifications`, regroupées par campagne) : chaque campagne affiche le total de
+  destinataires et une ventilation par statut (`queued`/`sent`/`delivered`/`failed`/`read`), ligne
+  dépliable pour voir le détail par destinataire, bouton "Rafraîchir" par campagne pour interroger
+  Resend et faire progresser le statut `sent` → `delivered`/`failed`.
+- **Trois nouveaux codes de permission** (`communication.view`/`communication.manage`/
+  `communication.send` — catalogue 53 → **56 codes**) : `.manage` couvre les annonces et modèles
+  (authoring), `.send` isole l'acte d'envoi comme une autorité distincte (même logique que
+  `finance.approve`/`training.certify` des phases précédentes), `.view` couvre la lecture des
+  trois. Attribution : `SECRETARY` reçoit les trois (rôle administratif déjà responsable des
+  membres/événements) ; `PASTORAL_LEADER`/`MINISTRY_LEADER`/`WORKER`/`MEMBER` reçoivent
+  `.view` seul (visibilité des annonces et de l'historique, sans pouvoir composer).
+
+**Lien `messages` ↔ `notifications` via `data` (jsonb), pas une colonne** : le schéma réel ne relie
+pas une campagne (`messages`) à ses lignes de suivi par destinataire (`notifications`) — cette
+dernière table a été conçue pour des notifications individuelles, pas pour tracer une campagne.
+Plutôt que d'ajouter une colonne `message_id` (hors du minimum nécessaire, comme pour le statut de
+budget en Phase 9), chaque `notifications.data` stocke `{ messageId }` au moment de l'envoi ;
+`getMessages`/`getMessageRecipients` (`features/communication/queries`) filtrent dessus via
+l'opérateur jsonb `->>`. Documenté explicitement dans le code, avec la réserve que ce n'est pas une
+clé étrangère indexée — acceptable à l'échelle d'une église, à revisiter si le volume de campagnes
+devenait significatif.
+
+**Envoi réel par email (premier critère de sortie explicite)** — `sendMessage`
+(`features/communication/actions`) : pour chaque destinataire sélectionné, crée une ligne
+`notifications` (`queued`), appelle `resend.emails.send()` (SDK `resend`, ajouté cette phase) avec
+l'expéditeur `onboarding@resend.dev` (domaine de test fourni par Resend, aucune vérification de
+domaine nécessaire), puis passe la ligne à `sent`/`sent_at` sur succès ou `failed` sur erreur
+synchrone — jamais dans une Server Action utilisant le client admin Supabase (l'appel Resend
+lui-même n'a besoin d'aucun client Supabase, seule la clé `RESEND_API_KEY`, lue paresseusement par
+`lib/email/resend.ts` pour ne jamais faire échouer un build sans elle). **Clé API fournie par
+l'utilisateur** (aucun compte Resend créé par l'agent, qui ne peut pas s'inscrire à un service tiers
+en son nom) — ajoutée à `.env.local` (jamais commitée, `.gitignore` vérifié).
+
+**Statut livré/échoué (second critère de sortie explicite)** — le statut synchrone de
+`resend.emails.send()` ne confirme que l'acceptation par Resend (`sent`), pas la livraison réelle ;
+celle-ci n'arrive normalement que par un webhook asynchrone, impossible à recevoir depuis une
+instance de développement locale sans URL publique. Contournement retenu : `refreshMessageStatuses`
+interroge directement `resend.emails.get(id)`, qui reflète le **suivi interne de Resend**
+indépendamment de tout webhook configuré côté client — l'API renvoie `last_event`
+(`delivered`/`bounced`/`failed`/...), reclassé en `delivered`/`failed` côté `notifications`. **Bug
+réel trouvé et corrigé pendant cette vérification** : la première version de `refreshMessageStatuses`
+avalait silencieusement l'erreur de `resend.emails.get()` (`if (!email) continue`) sans jamais la
+remonter à l'appelant, qui recevait `{ success: true }` même quand rien n'avait été rafraîchi —
+découvert en conditions réelles quand la première clé API fournie (portée "Sending only") a fait
+échouer tous les appels `GET /emails/:id` avec une 401 `restricted_api_key`, sans qu'aucun message
+d'erreur n'apparaisse dans l'interface. Corrigé en remontant l'erreur Resend telle quelle
+(`{ error: "Resend a refusé la lecture du statut : ..." }`). **Contrainte d'environnement,
+résolue par l'utilisateur** : une seconde clé API avec la portée "Full access" a été fournie pour
+que la lecture de statut fonctionne réellement (même mécanique que la clé `RESEND_API_KEY`
+elle-même — l'agent ne peut pas changer la portée d'une clé Resend, seul l'utilisateur y a accès).
+
+Vérifié en conditions réelles (organisation de test dédiée, nettoyée après) — deux personnes
+créées avec les adresses de test **fournies par Resend lui-même** pour ce cas d'usage exact
+(`delivered@resend.dev` simule une livraison réussie, `bounced@resend.dev` un rejet), plutôt qu'une
+adresse personnelle réelle : annonce créée et publiée (ligne dépliable confirmée) ; modèle email
+créé avec variable `{{prenom}}` ; composition avec préremplissage du modèle, sélection des deux
+destinataires de test, **envoi réel confirmé** (`Envoyé 2` immédiatement après clic, les deux
+lignes `notifications` passées à `sent` avec un `resendId` Resend authentique) ; clic sur
+"Rafraîchir" avec la clé à portée complète → **`Livré 1` / `Échoué 1`**, le détail par destinataire
+confirmant exactement `Test Delivered → Livré` et `Test Bounced → Échoué` — **les deux critères de
+sortie de cette phase prouvés en direct, pas seulement plausibles par lecture de code**.
+
+**Isolation vérifiée en direct (Playwright, navigateur réel)** — deux comptes de test distincts,
+pour couvrir deux niveaux d'isolation différents :
+- `FINANCE_MANAGER` (aucun code `communication.*`) : "Accès refusé (`communication.view`)" sur
+  toute la page `/communication` — isolation au niveau de la page, même motif que les phases
+  précédentes.
+- `WORKER` (`communication.view` seul, sans `.send`) : voit normalement les annonces et
+  l'historique (bouton "Nouvelle annonce" absent, bouton "Rafraîchir" absent), mais reçoit "Accès
+  refusé (`communication.send`)" en cliquant sur l'onglet Composer — **isolation au niveau d'une
+  action à l'intérieur d'une page par ailleurs accessible**, une granularité pas encore testée
+  explicitement dans les phases précédentes (qui opposaient plutôt page accessible vs page
+  refusée) et qui confirme que `checkPermission` fonctionne aussi bien pour un gate de section que
+  pour un gate de page entière.
+
+**Volontairement reporté** : envoi réel par SMS/WhatsApp (les modèles pour ces canaux sont
+authoring-ready dans l'UI et le schéma, mais aucun fournisseur n'est câblé — seul Resend/email
+répond au critère de sortie explicite de cette phase, qui ne mentionne que "Resend en sandbox") ;
+planification d'un envoi différé (`messages.scheduled_at` existe dans le schéma mais n'est pas
+exposé dans le formulaire de composition, aucune infrastructure de job différé avant Inngest) ;
+gestion des préférences de notification par canal (`notification_preferences` existe mais sans UI —
+peu de valeur avant qu'un système de notifications automatiques déclenchées par événement existe
+réellement, prévu pour une phase ultérieure) ; audience ciblée par filtre (statut, groupe,
+ministère...) — la sélection de destinataires reste une liste de cases à cocher individuelles,
+`recipient_filter`/`audience_filter` (jsonb) restent au repos pour de futurs filtres démographiques.

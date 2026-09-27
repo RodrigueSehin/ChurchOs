@@ -5,4 +5,4 @@ import "server-only";
  * `features/members/queries` directement (voir la règle de dépendances dans
  * docs/architecture/01-project-structure.md).
  */
-export { getPeopleForSelect } from "@/features/members/queries/people";
+export { getPeopleForSelect, getPeopleWithEmailForSelect } from "@/features/members/queries/people";

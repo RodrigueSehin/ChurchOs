@@ -1783,6 +1783,9 @@ insert into public.permissions (code, name, module, description) values
 ('training.manage','Gérer les formations','training','Créer/modifier les cours et leurs modules'),
 ('training.enroll','Gérer les inscriptions aux cours','training','Inscrire une personne à un cours, modifier statut/progression'),
 ('training.certify','Délivrer des certifications','training','Émettre une certification pour une personne'),
+('communication.view','Voir les communications','communication','Consulter les annonces, modèles et l''historique d''envoi'),
+('communication.manage','Gérer les communications','communication','Créer/modifier les annonces et les modèles de message'),
+('communication.send','Envoyer des messages','communication','Composer et envoyer une campagne de messages'),
 ('settings.manage','Gérer les paramètres','settings','Administrer ChurchOS')
 on conflict (code) do nothing;
 
