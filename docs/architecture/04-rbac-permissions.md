@@ -11,7 +11,9 @@
 > schéma d'origine). **Phase 9 : aucun code ajouté** — `finance.view`/`finance.create`/
 > `finance.approve` existaient déjà dans le schéma d'origine, jamais utilisés avant cette phase,
 > et déjà correctement réservés à `FINANCE_MANAGER` dans `ROLE_PERMISSIONS` ; catalogue toujours à
-> 49 codes.
+> 49 codes. Ajouté en Phase 10 : `training.view`/`training.manage`/`training.enroll`/
+> `training.certify` (catalogue 49 → 53 codes) — aucun code `training.*` n'existait avant cette
+> phase.
 
 ## Rôles
 

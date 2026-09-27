@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMemberDetail } from "@/features/members/queries";
 import { GENDER_LABELS, MEMBER_STATUS_LABELS } from "@/features/members/schemas";
 import { ArchiveMemberButton } from "@/features/members/components/archive-member-button";
+import { getTrainingSummaryForPerson } from "@/features/training/services";
+import { TrainingProgressCard } from "@/features/training/components/training-progress-card";
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "secondary"> = {
   active: "success",
@@ -49,6 +51,13 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
   const name = person.preferredName || `${person.firstName} ${person.lastName}`;
   const canUpdate = check.context.isAdmin || check.context.permissions.has("members.update");
   const canDelete = check.context.isAdmin || check.context.permissions.has("members.delete");
+  // Gardé sur training.view (pas members.view, déjà vérifié plus haut pour toute la page) :
+  // même précaution que /finance/reports en Phase 9 — ne pas exposer le suivi de formation à un
+  // rôle qui voit les membres mais n'a pas accès au module Formations.
+  const canViewTraining = check.context.isAdmin || check.context.permissions.has("training.view");
+  const trainingSummary = canViewTraining
+    ? await getTrainingSummaryForPerson(check.organization.organization.id, person.id)
+    : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -149,6 +158,8 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
               </dl>
             </CardContent>
           </Card>
+
+          {trainingSummary && <TrainingProgressCard summary={trainingSummary} />}
         </div>
       </div>
     </div>

@@ -1779,6 +1779,10 @@ insert into public.permissions (code, name, module, description) values
 ('finance.approve','Approuver une opération','finance','Approuver une opération'),
 ('reports.view','Voir les rapports','reports','Consulter les rapports'),
 ('reports.export','Exporter les rapports','reports','Exporter les rapports'),
+('training.view','Voir les formations','training','Consulter les cours, modules, inscriptions et certifications'),
+('training.manage','Gérer les formations','training','Créer/modifier les cours et leurs modules'),
+('training.enroll','Gérer les inscriptions aux cours','training','Inscrire une personne à un cours, modifier statut/progression'),
+('training.certify','Délivrer des certifications','training','Émettre une certification pour une personne'),
 ('settings.manage','Gérer les paramètres','settings','Administrer ChurchOS')
 on conflict (code) do nothing;
 

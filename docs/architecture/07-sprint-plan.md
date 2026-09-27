@@ -18,7 +18,7 @@ conservant l'architecture et les conventions de ce document.
 | **7. Ministries** ✅ | Ministères, équipes, ouvriers, services, planning | Affectation + détection de conflits de planning — **livré, vérifié en conditions réelles** |
 | **8. Events** ✅ | Événements, inscriptions (+ QR code), présences, calendrier agrégé | Scan QR fonctionnel, calendrier agrège tous les modules pertinents — **livré, vérifié en conditions réelles** |
 | **9. Finance** ✅ | Dons/offrandes, dépenses, budgets, rapports financiers, flux d'approbation | Permissions finance strictement isolées (test RLS dédié) — **livré, vérifié en conditions réelles** |
-| **10. Training** | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil |
+| **10. Training** ✅ | Cours, modules, inscriptions, progression, certifications | Suivi de progression membre visible sur son profil — **livré, vérifié en conditions réelles** |
 | **11. Communication** | Annonces, templates (email/SMS/WhatsApp), notifications, historique d'envoi | Un envoi réel (Resend en sandbox) + statut livré/échoué |
 | **12. Documents & Resources** | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés |
 | **13. Analytics** | Dashboards enrichis, graphiques, rapports, exports PDF/Excel/CSV | Dashboard `/analytics` avec vraies agrégations SQL |
@@ -605,3 +605,90 @@ d'export avant la Phase 13/Analytics) ; rapprochement bancaire ou import de rele
 multi-devises (le schéma stocke un montant numérique simple, pas de colonne devise sur les
 transactions) ; historique des changements de statut d'un budget (seul le statut courant est
 stocké, pas un journal d'audit dédié).
+
+**PHASE 10 — Training** ✅ : livrée et vérifiée de bout en bout en conditions réelles
+(2026-09-27), y compris le critère de sortie explicite (suivi de progression membre visible sur
+sa fiche).
+
+Livré — un seul module `features/training/` couvrant deux pages :
+- **Catalogue de cours** (`/training`) : liste + recherche + pagination serveur (même motif que
+  les modules précédents), création par dialogue (`CourseFormDialog`, statut brouillon/publié/
+  archivé, formateur optionnel choisi parmi les personnes de l'organisation, durée en minutes).
+- **Détail d'un cours** (`/training/[id]`, seule route dédiée de la phase — les modules/
+  inscriptions/certifications sont gérés inline depuis cette page, pas de sous-routes) : trois
+  panneaux —
+  - **Modules** (`course_modules`) : liste numérotée + formulaire d'ajout inline (titre, durée,
+    description), suppression réservée aux admins.
+  - **Inscriptions** (`course_enrollments`) : inscription d'une personne (exclut automatiquement
+    celles déjà inscrites, même motif que `MinistryMembersPanel`), changement de statut inline
+    (`FormSelect` + `startTransition`, motif établi en Phase 8 pour les inscriptions
+    événementielles) — passer une inscription à "Terminé" positionne automatiquement la
+    progression à 100 % et `completed_at` — et édition du pourcentage de progression via un champ
+    numérique `onBlur` (même motif que le montant réel d'une ligne budgétaire en Phase 9), avec une
+    barre de progression visuelle.
+  - **Certifications** (`certifications`) : délivrance à une personne (numéro, dates de délivrance/
+    expiration, lien du certificat, tous optionnels sauf le nom du certificat), pas nécessairement
+    liée à une inscription existante — délibéré, un certificat peut aussi être délivré pour une
+    formation suivie hors ligne.
+- **Critère de sortie** : une carte "Formations" ajoutée à la fiche membre (`/members/[id]`,
+  Phase 5) affiche, pour la personne consultée, chacune de ses inscriptions (titre du cours, badge
+  de statut, barre de progression + pourcentage) et ses certifications — via
+  `getTrainingSummaryForPerson`, exposée à travers la façade `features/training/services`
+  (jamais un import direct dans `features/training/queries` depuis un autre module, règle de
+  `01-project-structure.md`).
+- **Quatre nouveaux codes de permission** (`training.view/manage/enroll/certify` — catalogue 49 →
+  **53 codes**, une première depuis la Phase 8) : aucune des tables `courses`/`course_modules`/
+  `course_enrollments`/`certifications` n'avait de permission dédiée avant cette phase (contrairement
+  à la Phase 9/Finance où les codes existaient déjà sans être utilisés). `training.manage` couvre la
+  création/modification des cours et modules (plutôt qu'un simple `training.create` — un cours se
+  construit par ajouts successifs de modules, pas en un seul formulaire, donc une seule permission
+  d'auteur suffit) ; `training.enroll` couvre l'inscription et son suivi (statut/progression),
+  séparé de `training.manage` car une secrétaire ou un ouvrier peut légitimement gérer des
+  inscriptions sans avoir le droit de modifier le contenu pédagogique d'un cours ; `training.certify`
+  isole la délivrance de certifications comme un acte d'autorité distinct (même logique que
+  `finance.approve` en Phase 9, distinct de `finance.create`). Attribution : `PASTORAL_LEADER` reçoit
+  les quatre codes (la formation/discipolat relève du suivi pastoral dans ce contexte — cohérent
+  avec "Formation des nouveaux convertis" déjà visible dans les données de démonstration du tableau
+  de bord) ; `MINISTRY_LEADER` reçoit `training.view` seul (visibilité, pas gestion) ;
+  `SECRETARY`/`WORKER`/`MEMBER` reçoivent `training.view` + `training.enroll` (consultation du
+  catalogue et auto-inscription, même logique que `registrations.create` pour `MEMBER` en Phase 8).
+  Migration de catalogue préparée par l'agent (`db/schema.sql` + SQL fourni), **appliquée par
+  l'utilisateur** via le SQL Editor Supabase (contrainte établie depuis la Phase 3 : l'agent ne peut
+  pas modifier lui-même le schéma live).
+
+**Isolation vérifiée en direct (Playwright, navigateur réel)** — organisation de test dédiée,
+nettoyée après : compte `CHURCH_OWNER` (admin) et compte `FINANCE_MANAGER` (permissions réelles
+seedées manuellement — `members.view`/`finance.*`/`reports.*`, **aucun** code `training.*`, exactement
+la configuration `FINANCE_MANAGER` réelle de `ROLE_PERMISSIONS`, choisie précisément parce qu'elle a
+`members.view` sans `training.view` — le cas qui prouve une isolation ciblée plutôt qu'un verrouillage
+général). Avec le compte admin : cours "Fondements de la foi" créé (publié, 240 min), module ajouté,
+une personne existante ("Aïcha Konate") inscrite puis passée à "Terminé" (progression auto-passée à
+100 %), certification délivrée ; un second membre réel ("Emmanuel Kouassi", créé via `/members/new`
+pour que l'exemple porte sur un vrai `members`, pas seulement une `people`) inscrit au même cours,
+progression réglée manuellement à 65 % via le champ `onBlur`. Sa fiche (`/members/[id]`) affiche
+alors correctement "Fondements de la foi — Inscrit — 65 %" dans la carte Formations — **critère de
+sortie confirmé**. Avec le compte `FINANCE_MANAGER` : `/training` affiche "Accès refusé
+(`training.view`)" ; la fiche membre d'Emmanuel Kouassi se charge normalement (informations
+personnelles, adhésion) mais la carte "Formations" est **entièrement absente** — même précaution
+que `/finance/reports` en Phase 9 (gater la carte sur `training.view`, pas sur `members.view` déjà
+vérifié pour le reste de la page), cette fois vérifiée dès l'écriture du code et confirmée en direct
+du premier coup, sans bug à corriger après coup.
+
+**Aucun bug applicatif trouvé pendant cette vérification** — une première depuis la Phase 6.
+Hypothèse la plus probable : la leçon de la famille de bugs `FormData`/Zod (Phases 5/6/8/9) a été
+appliquée préventivement dès l'écriture des schémas de cette phase (`enrollPersonSchema.status`
+utilise `.nullish().transform(v => v ?? "enrolled")` dès le départ, avec un commentaire explicite
+renvoyant aux occurrences précédentes, plutôt que d'attendre de reproduire le bug une quatrième
+fois) ; et la leçon de l'isolation `reports.view`/`finance.view` (Phase 9) a de même été appliquée
+préventivement à la carte Formations dès sa conception.
+
+**Volontairement reporté** : modification d'un module existant (seuls l'ajout et la suppression
+sont proposés — le contenu `jsonb` d'un module, prévu par le schéma pour du contenu riche
+structuré, n'est pas exposé dans l'UI cette phase, seulement titre/description/durée) ;
+réordonnancement des modules par glisser-déposer (`sort_order` existe et est respecté à
+l'affichage, mais fixé à la création plutôt qu'édité ensuite) ; auto-progression du pourcentage en
+fonction des modules complétés par l'apprenant (la progression reste un pourcentage saisi
+manuellement, pas calculé à partir d'un suivi module-par-module — `course_modules` n'a pas de table
+de progression par module dans le schéma réel) ; notification à la certification ou à
+l'expiration (`certifications.expires_at` existe et s'affiche mais ne déclenche rien, aucune
+infrastructure de job asynchrone avant la Phase 11/Inngest).

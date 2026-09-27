@@ -77,6 +77,10 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: "finance.approve", name: "Approuver une opération", module: "finance", description: "Approuver une opération" },
   { code: "reports.view", name: "Voir les rapports", module: "reports", description: "Consulter les rapports" },
   { code: "reports.export", name: "Exporter les rapports", module: "reports", description: "Exporter les rapports" },
+  { code: "training.view", name: "Voir les formations", module: "training", description: "Consulter les cours, modules, inscriptions et certifications" },
+  { code: "training.manage", name: "Gérer les formations", module: "training", description: "Créer/modifier les cours et leurs modules" },
+  { code: "training.enroll", name: "Gérer les inscriptions aux cours", module: "training", description: "Inscrire une personne à un cours, modifier statut/progression" },
+  { code: "training.certify", name: "Délivrer des certifications", module: "training", description: "Émettre une certification pour une personne" },
   { code: "settings.manage", name: "Gérer les paramètres", module: "settings", description: "Administrer ChurchOS" },
 ];
 
@@ -117,6 +121,10 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "events.view",
     "attendance.view",
     "reports.view",
+    "training.view",
+    "training.manage",
+    "training.enroll",
+    "training.certify",
   ),
 
   MINISTRY_LEADER: only(
@@ -147,6 +155,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "calendar.view",
     "calendar.manage",
     "reports.view",
+    "training.view",
   ),
 
   FINANCE_MANAGER: only(
@@ -172,6 +181,8 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "registrations.update",
     "calendar.view",
     "reports.view",
+    "training.view",
+    "training.enroll",
   ),
 
   WORKER: only(
@@ -183,7 +194,9 @@ export const ROLE_PERMISSIONS: Record<SystemRole, string[]> = {
     "attendance.create",
     "registrations.view",
     "calendar.view",
+    "training.view",
+    "training.enroll",
   ),
 
-  MEMBER: only("events.view", "registrations.create", "calendar.view"),
+  MEMBER: only("events.view", "registrations.create", "calendar.view", "training.view", "training.enroll"),
 };
