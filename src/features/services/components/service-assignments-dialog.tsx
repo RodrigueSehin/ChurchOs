@@ -45,6 +45,9 @@ export function ServiceAssignmentsDialog({
   workers,
   canManage,
   isAdmin,
+  trigger,
+  open: openProp,
+  onOpenChange,
 }: {
   serviceId: string;
   serviceTitle: string;
@@ -52,17 +55,26 @@ export function ServiceAssignmentsDialog({
   workers: { id: string; name: string }[];
   canManage: boolean;
   isAdmin: boolean;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const boundAdd = addServiceAssignment.bind(null, serviceId);
   const [state, formAction, pending] = useActionState(boundAdd, initialState);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
-        <Users className="size-4" />
-        Affectations ({assignments.length})
-      </Button>
+      {trigger ? (
+        <span onClick={() => setOpen(true)}>{trigger}</span>
+      ) : (
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
+          <Users className="size-4" />
+          Affectations ({assignments.length})
+        </Button>
+      )}
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Affectations — {serviceTitle}</DialogTitle>

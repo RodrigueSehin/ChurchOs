@@ -35,13 +35,19 @@ export function ServiceFormDialog({
   types,
   service,
   trigger,
+  open: openProp,
+  onOpenChange,
 }: {
   action: (prev: ServiceActionState, formData: FormData) => Promise<ServiceActionState>;
   types: ServiceType[];
   service?: Service;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [state, formAction, pending] = useActionState(async (prev: ServiceActionState, formData: FormData) => {
     const result = await action(prev, formData);
     if (result.success) {
