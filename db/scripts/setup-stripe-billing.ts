@@ -64,9 +64,16 @@ async function main() {
       metadata: { planCode: code, interval: "yearly" },
     });
 
+    // Fusion faite côté JS (pas `features || '{...}'::jsonb`) : si `features` n'est pas déjà un
+    // objet jsonb propre — ex. un scalaire chaîne mal encodé, trouvé en conditions réelles sur cet
+    // environnement — l'opérateur `||` empile les deux valeurs dans un tableau au lieu de fusionner,
+    // silencieusement. Un `set` explicite d'un objet JS reconstruit ne peut pas produire ce résultat.
+    const currentFeatures =
+      typeof plan.features === "string" ? JSON.parse(plan.features) : (plan.features ?? {});
     await sql`
       update public.plans
-      set features = features || ${JSON.stringify({
+      set features = ${JSON.stringify({
+        ...currentFeatures,
         stripePriceIdMonthly: priceMonthly.id,
         stripePriceIdYearly: priceYearly.id,
       })}::jsonb
