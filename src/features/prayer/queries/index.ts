@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { authUsers, people, prayerRequests, prayerUpdates } from "@/lib/db/schema";
@@ -8,6 +8,37 @@ import { confidentialBooleanFilter, type ConfidentialityContext } from "@/lib/rb
 export { getAssignableMembers as getAssignableUsers } from "@/features/rbac/services";
 
 export const PRAYER_PAGE_SIZE = 20;
+
+function monthStartISO(monthsOffset = 0): string {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + monthsOffset);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Utilisée par la page Suivi pastoral (carte KPI "Sujets de prière") — voir la règle de façade
+ * cross-module dans 01-project-structure.md. Ne filtre pas par confidentialité : un total agrégé
+ * ("combien de sujets ce mois-ci"), pas une liste de contenus, donc rien de confidentiel n'est
+ * exposé par ce seul chiffre. */
+export async function getPrayerRequestsThisMonthKpi(organizationId: string) {
+  const thisMonthStart = monthStartISO(0);
+  const nextMonthStart = monthStartISO(1);
+  const lastMonthStart = monthStartISO(-1);
+  const [[thisMonth], [lastMonth]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(prayerRequests)
+      .where(and(eq(prayerRequests.organizationId, organizationId), sql`${prayerRequests.createdAt}::date >= ${thisMonthStart} and ${prayerRequests.createdAt}::date < ${nextMonthStart}`)),
+    db
+      .select({ value: count() })
+      .from(prayerRequests)
+      .where(and(eq(prayerRequests.organizationId, organizationId), sql`${prayerRequests.createdAt}::date >= ${lastMonthStart} and ${prayerRequests.createdAt}::date < ${thisMonthStart}`)),
+  ]);
+  const nowValue = thisMonth?.value ?? 0;
+  const beforeValue = lastMonth?.value ?? 0;
+  const deltaPct = beforeValue <= 0 ? (nowValue > 0 ? 100 : 0) : Math.round(((nowValue - beforeValue) / beforeValue) * 100);
+  return { value: nowValue, deltaPct };
+}
 
 export async function getPrayerRequests({
   organizationId,

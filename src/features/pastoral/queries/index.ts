@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, countDistinct, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { authUsers, pastoralFollowups, pastoralNotes, people } from "@/lib/db/schema";
@@ -7,19 +7,19 @@ import { confidentialBooleanFilter, confidentialityLevelFilter, type Confidentia
 
 export const PASTORAL_PAGE_SIZE = 20;
 
-export async function getPastoralFollowups({
-  organizationId,
-  ctx,
-  search,
-  status,
-  page = 1,
-}: {
+export interface PastoralFollowupsParams {
   organizationId: string;
   ctx: ConfidentialityContext;
   search?: string;
   status?: string;
+  priority?: string;
+  /** Onglet de raccourci — `"toVisit"`/`"active"`/`"sensitive"`/`"stale"`, voir `getPastoralTabCounts`. */
+  view?: string;
+  assignedToUserId?: string;
   page?: number;
-}) {
+}
+
+export async function getPastoralFollowups({ organizationId, ctx, search, status, priority, view, assignedToUserId, page = 1 }: PastoralFollowupsParams) {
   const conditions = [
     eq(pastoralFollowups.organizationId, organizationId),
     confidentialityLevelFilter(ctx, pastoralFollowups.confidentiality, pastoralFollowups.createdBy, pastoralFollowups.assignedToUserId),
@@ -30,6 +30,18 @@ export async function getPastoralFollowups({
   }
   if (status) {
     conditions.push(eq(pastoralFollowups.status, status as (typeof pastoralFollowups.status.enumValues)[number]));
+  }
+  if (priority) {
+    conditions.push(eq(pastoralFollowups.priority, priority as (typeof pastoralFollowups.priority.enumValues)[number]));
+  }
+  if (assignedToUserId) conditions.push(eq(pastoralFollowups.assignedToUserId, assignedToUserId));
+  const cutoff30 = daysAgoISO(30);
+  if (view === "toVisit") conditions.push(eq(pastoralFollowups.status, "new"));
+  else if (view === "active") conditions.push(sql`${pastoralFollowups.status} in ('new','in_progress','waiting')`);
+  else if (view === "sensitive") conditions.push(eq(pastoralFollowups.confidentiality, "restricted"));
+  else if (view === "stale") {
+    conditions.push(sql`${pastoralFollowups.status} in ('new','in_progress','waiting')`);
+    conditions.push(sql`${pastoralFollowups.updatedAt}::date <= ${cutoff30}`);
   }
   const where = and(...conditions);
 
@@ -42,11 +54,14 @@ export async function getPastoralFollowups({
         priority: pastoralFollowups.priority,
         confidentiality: pastoralFollowups.confidentiality,
         dueDate: pastoralFollowups.dueDate,
+        updatedAt: pastoralFollowups.updatedAt,
         personFirstName: people.firstName,
         personLastName: people.lastName,
+        assignedToEmail: authUsers.email,
       })
       .from(pastoralFollowups)
       .innerJoin(people, eq(people.id, pastoralFollowups.personId))
+      .leftJoin(authUsers, eq(authUsers.id, pastoralFollowups.assignedToUserId))
       .where(where)
       .orderBy(desc(pastoralFollowups.createdAt))
       .limit(PASTORAL_PAGE_SIZE)
@@ -109,6 +124,94 @@ export async function getPastoralStatusSummary(organizationId: string, ctx: Conf
     )
     .groupBy(pastoralFollowups.status);
   return rows;
+}
+
+function daysAgoISO(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+function pctDelta(current: number, previous: number): number {
+  if (previous <= 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+/** 5 cartes KPI de la page Suivi pastoral — toutes filtrées par confidentialité (jamais de
+ * comptage brut qui contournerait `confidentialityLevelFilter`, même agrégé). */
+export async function getPastoralKpis(organizationId: string, ctx: ConfidentialityContext) {
+  const cutoff30 = daysAgoISO(30);
+  const confFilter = confidentialityLevelFilter(ctx, pastoralFollowups.confidentiality, pastoralFollowups.createdBy, pastoralFollowups.assignedToUserId);
+
+  const [[membersNow], [membersBefore], [sensitiveNow], [sensitiveBefore], [inProgress]] = await Promise.all([
+    db
+      .select({ value: countDistinct(pastoralFollowups.personId) })
+      .from(pastoralFollowups)
+      .where(and(eq(pastoralFollowups.organizationId, organizationId), confFilter)),
+    db
+      .select({ value: countDistinct(pastoralFollowups.personId) })
+      .from(pastoralFollowups)
+      .where(and(eq(pastoralFollowups.organizationId, organizationId), confFilter, sql`${pastoralFollowups.createdAt}::date <= ${cutoff30}`)),
+    db
+      .select({ value: count() })
+      .from(pastoralFollowups)
+      .where(and(eq(pastoralFollowups.organizationId, organizationId), confFilter, eq(pastoralFollowups.confidentiality, "restricted"))),
+    db
+      .select({ value: count() })
+      .from(pastoralFollowups)
+      .where(
+        and(
+          eq(pastoralFollowups.organizationId, organizationId),
+          confFilter,
+          eq(pastoralFollowups.confidentiality, "restricted"),
+          sql`${pastoralFollowups.createdAt}::date <= ${cutoff30}`,
+        ),
+      ),
+    db
+      .select({ value: count() })
+      .from(pastoralFollowups)
+      .where(and(eq(pastoralFollowups.organizationId, organizationId), confFilter, eq(pastoralFollowups.status, "in_progress"))),
+  ]);
+
+  return {
+    membersFollowed: { value: membersNow?.value ?? 0, deltaPct: pctDelta(membersNow?.value ?? 0, membersBefore?.value ?? 0) },
+    sensitive: { value: sensitiveNow?.value ?? 0, deltaPct: pctDelta(sensitiveNow?.value ?? 0, sensitiveBefore?.value ?? 0) },
+    inProgress: inProgress?.value ?? 0,
+  };
+}
+
+/** Comptages pour les onglets de raccourci — "À visiter" = `new` (pas encore démarré), "Suivis
+ * actifs" = new/in_progress/waiting, "Sans activité" = pas mis à jour depuis 30 jours (parmi les
+ * suivis actifs, sinon un suivi terminé depuis longtemps compterait à tort comme "sans activité"). */
+export async function getPastoralTabCounts(organizationId: string, ctx: ConfidentialityContext) {
+  const cutoff30 = daysAgoISO(30);
+  const confFilter = confidentialityLevelFilter(ctx, pastoralFollowups.confidentiality, pastoralFollowups.createdBy, pastoralFollowups.assignedToUserId);
+  const base = and(eq(pastoralFollowups.organizationId, organizationId), confFilter);
+
+  const [[all], [toVisit], [active], [sensitive], [stale]] = await Promise.all([
+    db.select({ value: count() }).from(pastoralFollowups).where(base),
+    db.select({ value: count() }).from(pastoralFollowups).where(and(base, eq(pastoralFollowups.status, "new"))),
+    db.select({ value: count() }).from(pastoralFollowups).where(and(base, sql`${pastoralFollowups.status} in ('new','in_progress','waiting')`)),
+    db.select({ value: count() }).from(pastoralFollowups).where(and(base, eq(pastoralFollowups.confidentiality, "restricted"))),
+    db
+      .select({ value: count() })
+      .from(pastoralFollowups)
+      .where(
+        and(
+          base,
+          sql`${pastoralFollowups.status} in ('new','in_progress','waiting')`,
+          sql`${pastoralFollowups.updatedAt}::date <= ${cutoff30}`,
+        ),
+      ),
+  ]);
+
+  return {
+    all: all?.value ?? 0,
+    toVisit: toVisit?.value ?? 0,
+    active: active?.value ?? 0,
+    sensitive: sensitive?.value ?? 0,
+    stale: stale?.value ?? 0,
+  };
 }
 
 export { getAssignableMembers as getAssignableUsers } from "@/features/rbac/services";

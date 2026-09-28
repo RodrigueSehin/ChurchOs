@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { people, visits } from "@/lib/db/schema";
@@ -7,6 +7,36 @@ import { people, visits } from "@/lib/db/schema";
 export { getAssignableMembers as getAssignableUsers } from "@/features/rbac/services";
 
 export const VISITS_PAGE_SIZE = 20;
+
+function monthStartISO(monthsOffset = 0): string {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + monthsOffset);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Utilisée par la page Suivi pastoral (carte KPI "Visites pastorales") — voir la règle de
+ * façade cross-module dans 01-project-structure.md. Compte sur `created_at` (date réelle de
+ * l'enregistrement), pas `scheduled_at` (peut être dans le futur ou nul). */
+export async function getVisitsThisMonthKpi(organizationId: string) {
+  const thisMonthStart = monthStartISO(0);
+  const nextMonthStart = monthStartISO(1);
+  const lastMonthStart = monthStartISO(-1);
+  const [[thisMonth], [lastMonth]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(visits)
+      .where(and(eq(visits.organizationId, organizationId), sql`${visits.createdAt}::date >= ${thisMonthStart} and ${visits.createdAt}::date < ${nextMonthStart}`)),
+    db
+      .select({ value: count() })
+      .from(visits)
+      .where(and(eq(visits.organizationId, organizationId), sql`${visits.createdAt}::date >= ${lastMonthStart} and ${visits.createdAt}::date < ${thisMonthStart}`)),
+  ]);
+  const nowValue = thisMonth?.value ?? 0;
+  const beforeValue = lastMonth?.value ?? 0;
+  const deltaPct = beforeValue <= 0 ? (nowValue > 0 ? 100 : 0) : Math.round(((nowValue - beforeValue) / beforeValue) * 100);
+  return { value: nowValue, deltaPct };
+}
 
 export async function getVisits({
   organizationId,
