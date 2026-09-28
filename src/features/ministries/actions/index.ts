@@ -19,6 +19,7 @@ function parseMinistryForm(formData: FormData) {
   return ministrySchema.safeParse({
     name: formData.get("name"),
     code: formData.get("code"),
+    category: formData.get("category"),
     description: formData.get("description"),
     leaderPersonId: formData.get("leaderPersonId"),
     status: formData.get("status"),
@@ -39,6 +40,7 @@ export async function createMinistry(_prev: MinistryActionState, formData: FormD
     organization_id: check.organization.organization.id,
     name: v.name,
     code: orNull(v.code),
+    category: orNull(v.category),
     description: orNull(v.description),
     leader_person_id: orNull(v.leaderPersonId),
     status: v.status,
@@ -73,6 +75,7 @@ export async function updateMinistry(
     .update({
       name: v.name,
       code: orNull(v.code),
+      category: orNull(v.category),
       description: orNull(v.description),
       leader_person_id: orNull(v.leaderPersonId),
       status: v.status,

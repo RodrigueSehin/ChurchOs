@@ -806,6 +806,7 @@ create table if not exists public.ministries (
   campus_id uuid references public.campuses(id) on delete set null,
   name text not null,
   code text,
+  category text,
   description text,
   leader_person_id uuid references public.people(id) on delete set null,
   status public.ministry_status not null default 'active',
@@ -814,6 +815,10 @@ create table if not exists public.ministries (
   updated_at timestamptz not null default now(),
   unique (organization_id, code)
 );
+
+-- Colonne ajoutée après la création initiale (design-reproduction, 2026-09-28) : sans effet sur une
+-- installation neuve (déjà dans le create table ci-dessus), nécessaire pour une base existante.
+alter table public.ministries add column if not exists category text;
 
 create table if not exists public.ministry_members (
   id uuid primary key default gen_random_uuid(),

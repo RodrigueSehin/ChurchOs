@@ -7,7 +7,7 @@ import { PermissionDenied } from "@/components/shared/permission-denied";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getMinistryDetail } from "@/features/ministries/queries";
+import { getMinistryCategories, getMinistryDetail } from "@/features/ministries/queries";
 import { getPeopleForSelect } from "@/features/members/services";
 import { updateMinistry } from "@/features/ministries/actions";
 import { MINISTRY_STATUS_LABELS } from "@/features/ministries/schemas";
@@ -43,9 +43,10 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
 
   const { id } = await params;
   const organizationId = check.organization.organization.id;
-  const [detail, people] = await Promise.all([
+  const [detail, people, categories] = await Promise.all([
     getMinistryDetail(organizationId, id),
     getPeopleForSelect(organizationId),
+    getMinistryCategories(organizationId),
   ]);
   if (!detail) notFound();
 
@@ -63,6 +64,7 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
               <MinistryFormDialog
                 action={updateMinistry.bind(null, ministry.id)}
                 people={people}
+                categories={categories}
                 ministry={ministry}
                 trigger={
                   <Button type="button" variant="secondary" size="sm">
@@ -85,6 +87,7 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
           <CardContent>
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Responsable" value={leader ? `${leader.firstName} ${leader.lastName}` : null} />
+              <Field label="Catégorie" value={ministry.category} />
               <Field label="Code" value={ministry.code} />
             </dl>
             {ministry.description && (

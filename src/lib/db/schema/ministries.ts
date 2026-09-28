@@ -15,6 +15,7 @@ export const ministries = pgTable(
     campusId: uuid("campus_id").references(() => campuses.id, { onDelete: "set null" }),
     name: text("name").notNull(),
     code: text("code"),
+    category: text("category"),
     description: text("description"),
     leaderPersonId: uuid("leader_person_id").references(() => people.id, { onDelete: "set null" }),
     status: ministryStatus("status").notNull().default("active"),

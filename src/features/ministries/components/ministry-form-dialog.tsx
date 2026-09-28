@@ -23,11 +23,13 @@ const initialState: MinistryActionState = {};
 export function MinistryFormDialog({
   action,
   people,
+  categories = [],
   ministry,
   trigger,
 }: {
   action: (prev: MinistryActionState, formData: FormData) => Promise<MinistryActionState>;
   people: { id: string; name: string }[];
+  categories?: string[];
   ministry?: typeof ministries.$inferSelect;
   trigger?: React.ReactNode;
 }) {
@@ -72,9 +74,26 @@ export function MinistryFormDialog({
               </FormSelect>
             </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ministry-code">Code (optionnel)</Label>
-            <Input id="ministry-code" name="code" defaultValue={ministry?.code ?? ""} placeholder="Ex : MIN-01" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ministry-code">Code (optionnel)</Label>
+              <Input id="ministry-code" name="code" defaultValue={ministry?.code ?? ""} placeholder="Ex : MIN-01" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ministry-category">Catégorie (optionnel)</Label>
+              <Input
+                id="ministry-category"
+                name="category"
+                list="ministry-category-options"
+                defaultValue={ministry?.category ?? ""}
+                placeholder="Ex : Spirituel"
+              />
+              <datalist id="ministry-category-options">
+                {categories.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="ministry-description">Description (optionnel)</Label>

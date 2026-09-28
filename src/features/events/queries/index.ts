@@ -1,10 +1,41 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, ilike } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, lt } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { eventCategories, eventRegistrations, events } from "@/lib/db/schema";
 
 export const EVENTS_PAGE_SIZE = 20;
+
+function yearStart(yearsAgo = 0): Date {
+  const year = new Date().getUTCFullYear() - yearsAgo;
+  return new Date(Date.UTC(year, 0, 1));
+}
+
+function pctDelta(current: number, previous: number): number {
+  if (previous <= 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+/** KPI "Événements cette année" réutilisé par la page Ministères — même logique
+ * cross-module que `getVisitsThisMonthKpi`/`getPrayerRequestsThisMonthKpi` pour Suivi pastoral :
+ * un vrai décompte d'évènements, gaté par l'appelant sur `events.view`. */
+export async function getEventsThisYearKpi(organizationId: string) {
+  const thisYearStart = yearStart(0);
+  const lastYearStart = yearStart(1);
+
+  const [[now], [before]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(events)
+      .where(and(eq(events.organizationId, organizationId), gte(events.startsAt, thisYearStart))),
+    db
+      .select({ value: count() })
+      .from(events)
+      .where(and(eq(events.organizationId, organizationId), gte(events.startsAt, lastYearStart), lt(events.startsAt, thisYearStart))),
+  ]);
+
+  return { value: now?.value ?? 0, deltaPct: pctDelta(now?.value ?? 0, before?.value ?? 0) };
+}
 
 export async function getEventCategories(organizationId: string) {
   return db.select().from(eventCategories).where(eq(eventCategories.organizationId, organizationId)).orderBy(asc(eventCategories.name));
