@@ -23,7 +23,7 @@ conservant l'architecture et les conventions de ce document.
 | **12. Documents & Resources** ✅ | Documents/dossiers/permissions, salles/équipements/réservations | Upload Supabase Storage sécurisé, types de fichiers contrôlés — **livré, vérifié en conditions réelles** |
 | **13. Analytics** ✅ | Dashboards enrichis, graphiques, rapports, exports PDF/Excel/CSV | Dashboard `/analytics` avec vraies agrégations SQL — **livré, vérifié en conditions réelles** |
 | **14. Billing** 🚧 | Plans, abonnements, facturation, `PaymentProvider` (Stripe + abstraction) | Upgrade/downgrade de plan fonctionnel en sandbox Stripe — **architecture livrée, vérification live en attente d'une clé API Stripe** |
-| **15. ChurchOS AI** | AI Assistant, AI Reports, AI Communication, AI Pastoral Assistant, AI Analytics | Filtrage par permission vérifié (voir §AI data filtering) |
+| **15. ChurchOS AI** 🚧 | Assistant IA (tool-calling OpenAI), filtrage par permission structurel | Filtrage par permission vérifié (voir §AI data filtering) — **architecture livrée, vérification live en attente de crédit sur la clé API OpenAI** |
 | **16. Production** | Tests (Vitest/Playwright), sécurité, monitoring (Sentry/PostHog), performance, SEO, CI/CD, documentation | Déploiement Vercel + Supabase, CI verte |
 
 ## Ce qui doit être vrai à la fin de chaque phase
@@ -1057,3 +1057,84 @@ gestion fine des moyens de paiement enregistrés (Stripe Customer Portal, pas co
 — le Portail client hébergé de Stripe couvrirait cela sans code supplémentaire une fois la clé
 disponible) ; alertes automatiques de paiement en retard (nécessiterait le webhook, non vérifiable
 localement).
+
+**PHASE 15 — ChurchOS AI** 🚧 : architecture complète livrée (2026-09-28), même situation que la
+Phase 14 — le critère de sortie (assistant conversationnel qui répond correctement aux questions
+autorisées et refuse proprement les autres) **n'a pas pu être vérifié en conditions réelles** : la
+clé `OPENAI_API_KEY` fournie n'a plus de crédit (`429 You have no credits remaining`). L'utilisateur
+a choisi de faire terminer l'architecture plutôt que d'attendre un rechargement du compte OpenAI.
+
+**Décision d'architecture (validée avec l'utilisateur avant tout code)** : la règle absolue "l'IA
+n'accède jamais à des données que l'utilisateur courant n'aurait pas pu voir lui-même" (voir
+`04-rbac-permissions.md#churchos-ai`) est garantie par du **tool-calling** (function calling
+OpenAI), pas par du RAG/embeddings sur `ai_documents`. Chaque "outil" que le modèle peut appeler
+est une vraie requête Drizzle enveloppée dans le même `checkPermission()` que le reste de
+l'application — un refus de permission est donc structurel et vérifiable (même mécanisme partout
+dans l'app), pas une probabilité de filtrage post-hoc sur des chunks de texte. Le pipeline RAG
+(`ai_documents`, pgvector, déjà en place depuis la Phase 2) est **volontairement reporté** : il
+répondrait à un besoin différent (poser des questions sur le contenu de documents uploadés, pas sur
+des agrégats structurés) et aurait ajouté une seconde surface de filtrage à maintenir sans que le
+critère de sortie de cette phase l'exige.
+
+Livré :
+- **`lib/ai/openai.ts`** : client OpenAI paresseux (même motif que Resend/Stripe) + `AI_MODEL =
+  "gpt-4o-mini"` (économique, supporte le tool-calling).
+- **`lib/ai/tools.ts`** — le cœur du critère de sortie : 5 outils, chacun avec son propre code de
+  permission existant (aucun nouveau code créé cette phase) :
+  - `get_member_stats` (`members.view`) → `features/analytics/services`
+  - `get_attendance_summary` (`attendance.view`) → `features/analytics/services`
+  - `get_finance_summary` (`finance.view`) → `features/analytics/services` — même leçon
+    Phase 9/13 appliquée une quatrième fois : jamais `reports.view` pour une donnée financière
+    agrégée
+  - `get_upcoming_events` (`events.view`) → nouvelle `getUpcomingEvents()` dans
+    `features/events/queries`, exposée via `features/events/services`
+  - `get_pastoral_summary` (`pastoral.view`) → nouvelle `getPastoralStatusSummary()` dans
+    `features/pastoral/queries` (première façade `features/pastoral/services` créée cette phase),
+    qui réutilise `confidentialityLevelFilter()` (Phase 6) pour ne compter que les suivis que
+    l'appelant peut réellement voir — la confidentialité pastorale est donc respectée **à
+    l'intérieur même** d'un outil autorisé, pas seulement à la porte d'entrée de l'outil.
+  Chaque handler commence par `checkPermission(code)` ; un refus renvoie
+  `{ error: "permission_denied", message: "..." }` (jamais une exception) que le modèle est
+  instruit (prompt système) de relayer poliment à l'utilisateur sans deviner de valeur de
+  remplacement.
+- **`features/ai/`** : `queries/index.ts` (`getConversations`/`getConversation`/
+  `getConversationMessages`, filtrées sur `organizationId` **et** `userId` — une conversation IA
+  est personnelle, `ai_conversations`/`ai_messages` n'ont qu'une RLS de niveau organisation comme
+  partout ailleurs dans ce schéma, donc ce filtre applicatif est indispensable, sinon n'importe quel
+  membre de l'organisation pourrait lire les questions/réponses de n'importe qui d'autre) ;
+  `actions/index.ts` (`createConversation`, `sendMessage` — la boucle de tool-calling complète :
+  persiste le message utilisateur, appelle `chat.completions.create` avec `tools:
+  getToolSpecs()`, exécute chaque appel d'outil demandé via `executeTool()`, repasse les résultats
+  au modèle, persiste chaque étape (`assistant` avec `tool_calls` en métadonnée, `tool` avec
+  `tool_call_id`) jusqu'à une réponse finale sans appel d'outil, plafonné à 4 aller-retours).
+- **UI** (`/ai` liste + nouvelle conversation, `/ai/[id]` conversation) : pas de streaming — réponse
+  synchrone complète, cohérent avec le reste de l'app (aucune autre fonctionnalité IA/temps réel
+  n'utilise de flux SSE/WebSocket actuellement). Formulaire de saisie en `useActionState`, comme
+  `PastoralNotesPanel` (Phase 6) ; Entrée envoie, Maj+Entrée fait un saut de ligne.
+- **Aucun nouveau code de permission** — les 5 codes utilisés existaient tous déjà (`members.view`,
+  `attendance.view`, `finance.view`, `events.view`, `pastoral.view`), catalogue inchangé à 61 codes.
+
+**Ce qui a été vérifié en conditions réelles, malgré le blocage OpenAI** : organisation de test
+dédiée créée (membres à statuts/dates variés, transactions financières du mois, événements publiés/
+brouillon/passé, une session de présence, 3 suivis pastoraux aux 3 niveaux de confidentialité), 2
+comptes réels (un `CHURCH_OWNER`, un rôle personnalisé avec seulement `members.view`/`events.view`/
+`attendance.view`/`pastoral.view` — sans `finance.view` ni `pastoral.view_confidential`, pensé
+spécifiquement pour prouver l'isolation ciblée plutôt qu'un verrouillage global). Connexion réelle,
+page `/ai` et création de conversation confirmées fonctionnelles (redirection vers `/ai/[id]`
+réelle). L'envoi du premier message a échoué avec une vraie erreur `429` OpenAI — remontée
+proprement à l'utilisateur via `state.error` (aucun crash, aucune donnée orpheline en base),
+confirmant au moins que le chemin d'erreur fonctionne comme prévu.
+
+**Non vérifié, en attente de crédit sur le compte OpenAI** : toute réponse réelle du modèle — donc
+tout le critère de sortie lui-même (l'assistant répond correctement aux questions autorisées,
+refuse poliment les questions financières pour le rôle restreint, et le résumé pastoral du rôle
+restreint exclut bien les suivis `pastoral`/`restricted` du comptage). **Prochaine étape dès qu'il y
+aura du crédit** : recréer un jeu de données de test équivalent et rejouer exactement ce scénario
+via Playwright avant de marquer cette phase ✅. Les scripts de setup/nettoyage utilisés pendant
+cette tentative (`db/scripts/phase15-e2e-setup.ts`/`phase15-cleanup.ts`) ont été supprimés après
+usage (motif jetable habituel) — à recréer au besoin, leur structure est décrite ci-dessus.
+
+**Volontairement reporté** : pipeline RAG (`ai_documents`/pgvector) pour poser des questions sur le
+contenu de documents uploadés — voir la décision d'architecture plus haut ; streaming de la réponse
+(SSE) ; export/partage d'une conversation ; suggestions de questions pré-remplies ; `lib/feature-
+flags/` (prévu depuis la Phase 4, toujours pas construit, hors du périmètre RBAC de cette phase).

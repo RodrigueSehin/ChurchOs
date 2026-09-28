@@ -119,3 +119,12 @@ Règle absolue inchangée : **l'IA n'accède jamais à des données que l'utilis
 pas pu voir lui-même.** `ai_documents` (RAG, pgvector) n'est indexé que pour du contenu
 explicitement éligible et n'est jamais exposé directement au rôle `authenticated` — accès
 service-role uniquement, filtré par permission côté serveur avant tout appel au modèle.
+
+**Implémentation retenue en Phase 15 : tool-calling, pas RAG.** La garantie ci-dessus est assurée
+par du function-calling OpenAI (`lib/ai/tools.ts`) : chaque outil que le modèle peut appeler est une
+vraie requête Drizzle enveloppée dans le même `checkPermission()` que n'importe quelle Server Action
+de l'application — un refus est donc structurel (le même mécanisme partout, testable comme
+n'importe quel autre gate), pas une probabilité de filtrage post-hoc sur des chunks de texte
+retrouvés par similarité vectorielle. Le pipeline RAG sur `ai_documents` décrit ci-dessus reste
+valide comme design pour une future fonctionnalité (questions sur le contenu de documents
+uploadés), mais n'a pas été construit en Phase 15 — voir `07-sprint-plan.md#phase-15`.

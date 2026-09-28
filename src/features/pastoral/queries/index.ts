@@ -93,4 +93,22 @@ export async function getPastoralFollowupDetail(organizationId: string, id: stri
   return { ...row, notes };
 }
 
+/** Comptage par statut (pas les enregistrements eux-mêmes) — utilisé par l'assistant ChurchOS AI
+ * (Phase 15) pour répondre à des questions de suivi pastoral sans jamais exposer plus qu'un
+ * compte agrégé. Le filtre de confidentialité s'applique quand même : un suivi `restricted` non
+ * accessible à l'appelant ne doit pas non plus être compté. */
+export async function getPastoralStatusSummary(organizationId: string, ctx: ConfidentialityContext) {
+  const rows = await db
+    .select({ status: pastoralFollowups.status, value: count() })
+    .from(pastoralFollowups)
+    .where(
+      and(
+        eq(pastoralFollowups.organizationId, organizationId),
+        confidentialityLevelFilter(ctx, pastoralFollowups.confidentiality, pastoralFollowups.createdBy, pastoralFollowups.assignedToUserId),
+      ),
+    )
+    .groupBy(pastoralFollowups.status);
+  return rows;
+}
+
 export { getAssignableMembers as getAssignableUsers } from "@/features/rbac/services";

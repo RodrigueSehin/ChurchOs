@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, ilike } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { eventCategories, eventRegistrations, events } from "@/lib/db/schema";
@@ -81,6 +81,17 @@ export async function getEventDetail(organizationId: string, eventId: string) {
   const registrationCount = registrationCountRows[0]?.value ?? 0;
 
   return { ...row, registrationCount };
+}
+
+/** Prochains événements publiés — utilisé par l'assistant ChurchOS AI (Phase 15), gaté sur
+ * `events.view` par l'appelant. */
+export async function getUpcomingEvents(organizationId: string, limit = 5) {
+  return db
+    .select({ id: events.id, title: events.title, startsAt: events.startsAt, location: events.location })
+    .from(events)
+    .where(and(eq(events.organizationId, organizationId), eq(events.status, "published"), gte(events.startsAt, new Date())))
+    .orderBy(asc(events.startsAt))
+    .limit(limit);
 }
 
 export async function getEventsForSelect(organizationId: string) {
