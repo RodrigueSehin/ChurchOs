@@ -1042,13 +1042,30 @@ Livré :
   gate déjà les pages sœurs `/settings/church`/`/settings/users`/`/settings/roles`) reçoit "Accès
   refusé (`settings.manage`)".
 
-**Non vérifié, en attente d'une clé `STRIPE_SECRET_KEY`** : création réelle d'un client Stripe,
-redirection vers une Session Checkout hébergée, paiement en sandbox (carte de test Stripe
-`4242 4242 4242 4242`), retour et synchronisation via `syncCheckoutSession`, changement direct
-d'un plan payant vers un autre (proratisation), annulation d'un abonnement Stripe réel, affichage
-d'une vraie facture Stripe. **Prochaine étape dès qu'une clé sera fournie** : exécuter
-`npm run db:setup-stripe-billing`, puis rejouer l'intégralité du parcours upgrade/downgrade en
-direct avant de marquer cette phase ✅.
+**2026-09-28 — clé `STRIPE_SECRET_KEY` fournie, vérification partiellement rejouée en direct** :
+`npm run db:setup-stripe-billing` exécuté avec succès (vrais Produits/Prix Stripe créés pour
+STARTER/PRO). **Bug réel trouvé et corrigé au passage** : `plans.features` pour STARTER/PRO était
+déjà un scalaire chaîne JSON doublement encodé sur la base réelle (pas un objet jsonb propre) —
+l'opérateur `features || '{...}'::jsonb` du script a donc empilé les deux valeurs dans un tableau
+au lieu de fusionner, silencieusement. Donnée réparée sur la base live ; le script fusionne
+désormais côté JS avant un `set` explicite (voir commit `27911c4`), qui ne peut pas reproduire ce
+résultat même si `features` est de nouveau corrompu ailleurs. Une fois réparé, `/settings/billing`
+a correctement affiché "Choisir ce plan" (au lieu d'"Indisponible") pour Starter/Pro. Cliquer
+"Choisir ce plan" (Starter) a réellement appelé `changePlan` → `ensureCustomer` → 
+`startOrChangeSubscription` contre la vraie API Stripe et redirigé vers une authentique Session
+Checkout hébergée (nom du plan, prix "15 000 F CFA/mois" et email du client corrects) — confirmant
+en direct la création de client + session Checkout, jusque-là jamais exercée.
+
+**Reste non vérifié, bloqué sur une restriction d'outillage (pas une question de clé)** : remplir
+et soumettre le formulaire de paiement Stripe Checkout (même avec la carte de test
+`4242 4242 4242 4242`) a été refusé par le classificateur de sécurité de l'agent ("Real-World
+Transactions") — l'automatisation d'un formulaire de paiement, même en mode test, est traitée comme
+une catégorie sensible et l'agent s'est arrêté sans contourner ce refus. Restent donc non rejoués :
+la complétion du paiement, le retour/synchronisation via `syncCheckoutSession`, le changement direct
+d'un plan payant vers un autre (proratisation), l'annulation d'un abonnement Stripe réel, et
+l'affichage d'une vraie facture. **Prochaine étape** : un humain complète ce paiement de test
+manuellement dans un navigateur (le reste du parcours peut ensuite être rejoué par l'agent, ou par
+un humain) avant de marquer cette phase ✅.
 
 **Volontairement reporté** : moyens de paiement mobiles ouest-africains (Orange Money, MTN Money,
 Wave — hors du périmètre de l'abstraction `PaymentProvider` actuelle, qui n'a qu'une implémentation
