@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { Church, Menu, Settings } from "lucide-react";
+import { Menu, Settings } from "lucide-react";
 
+import logo from "@/img/logo_churchos_dark.png";
 import { NavList } from "@/components/shared/nav-list";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -18,21 +20,19 @@ export function MobileSidebar() {
           <Menu className="size-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="flex flex-col p-0">
-        <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-slate-200 px-5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-navy text-white">
-            <Church className="size-4" />
-          </span>
-          <SheetTitle className="text-base font-semibold text-navy">ChurchOS</SheetTitle>
+      <SheetContent side="left" className="flex flex-col bg-navy p-0">
+        <div className="flex shrink-0 items-center border-b border-white/10 px-5 py-4">
+          <SheetTitle className="sr-only">ChurchOS</SheetTitle>
+          <Image src={logo} alt="ChurchOS" priority className="h-auto w-40" />
         </div>
         <div className="flex-1 overflow-y-auto">
           <NavList onNavigate={() => setOpen(false)} />
         </div>
-        <div className="border-t border-slate-200 p-3">
+        <div className="border-t border-white/10 p-3">
           <Link
             href="/settings/profile"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-navy"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white"
           >
             <Settings className="size-4 shrink-0" />
             <span>Paramètres</span>

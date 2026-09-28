@@ -21,7 +21,7 @@ export function NavList({ iconOnly = false, onNavigate }: NavListProps) {
       {navSections.map((section, sectionIndex) => (
         <div key={section.label ?? `section-${sectionIndex}`} className="flex flex-col gap-1">
           {section.label && !iconOnly && (
-            <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-white/40">
               {section.label}
             </p>
           )}
@@ -34,11 +34,11 @@ export function NavList({ iconOnly = false, onNavigate }: NavListProps) {
                 onClick={onNavigate}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-lg border-l-2 border-transparent px-3 py-2 text-sm font-medium transition-colors",
                   iconOnly && "justify-center px-2",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-navy",
+                    ? "border-gold bg-white/10 text-gold"
+                    : "text-white/70 hover:bg-white/10 hover:text-white",
                 )}
               >
                 <item.icon className="size-4 shrink-0" />
