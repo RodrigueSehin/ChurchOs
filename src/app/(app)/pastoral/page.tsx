@@ -119,8 +119,8 @@ export default async function PastoralPage({
         <KpiCard icon={UserCog} iconClassName="bg-amber-100 text-amber-600" label="Accompagnements" value={n(kpis.inProgress)} periodLabel="en cours" />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_260px]">
-        <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <PastoralTabs activeView={params.view ?? ""} counts={tabCounts} />
             {canCreate && (

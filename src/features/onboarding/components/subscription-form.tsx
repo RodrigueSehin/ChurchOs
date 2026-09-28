@@ -198,8 +198,8 @@ function SubscriptionFields({ plans }: { plans: PlanOption[] }) {
           })}
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="min-w-0 overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs text-slate-500">

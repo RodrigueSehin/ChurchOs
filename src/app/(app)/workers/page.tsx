@@ -124,8 +124,8 @@ export default async function WorkersPage({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
-        <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <WorkersTabs activeStatus={params.status ?? ""} counts={tabCounts} />
             {canCreate && <WorkerFormDialog action={createWorker} people={availablePeople} />}
