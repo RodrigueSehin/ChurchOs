@@ -27,13 +27,19 @@ export function WorkerFormDialog({
   people,
   worker,
   trigger,
+  open: openProp,
+  onOpenChange,
 }: {
   action: (prev: WorkerActionState, formData: FormData) => Promise<WorkerActionState>;
   people: { id: string; name: string }[];
   worker?: WorkerRow;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [state, formAction, pending] = useActionState(async (prev: WorkerActionState, formData: FormData) => {
     const result = await action(prev, formData);
     if (result.success) {
