@@ -22,7 +22,7 @@ import { AgeBreakdownChart } from "@/features/dashboard/components/age-breakdown
 import { FinanceOverviewCard } from "@/features/dashboard/components/finance-overview-card";
 import { GrowthChart } from "@/features/dashboard/components/growth-chart";
 import { HeroBanner } from "@/features/dashboard/components/hero-banner";
-import { KpiCard } from "@/features/dashboard/components/kpi-card";
+import { KpiCard } from "@/components/shared/kpi-card";
 import { MyTasksList } from "@/features/dashboard/components/my-tasks-list";
 import { QuickActions } from "@/features/dashboard/components/quick-actions";
 import { RecentActivityList } from "@/features/dashboard/components/recent-activity-list";

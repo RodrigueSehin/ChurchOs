@@ -1,10 +1,39 @@
 import "server-only";
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { people, visitors } from "@/lib/db/schema";
 
 export const VISITORS_PAGE_SIZE = 20;
+
+function daysAgoISO(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Utilisée par le tableau de bord et la page Membres (carte KPI "Visiteurs") — voir la règle de
+ * façade cross-module dans 01-project-structure.md. */
+export async function getVisitorsKpi(organizationId: string) {
+  const cutoff30 = daysAgoISO(30);
+  const [[now], [before]] = await Promise.all([
+    db.select({ value: count() }).from(visitors).where(and(eq(visitors.organizationId, organizationId), ne(visitors.status, "archived"))),
+    db
+      .select({ value: count() })
+      .from(visitors)
+      .where(
+        and(
+          eq(visitors.organizationId, organizationId),
+          ne(visitors.status, "archived"),
+          sql`${visitors.createdAt}::date <= ${cutoff30}`,
+        ),
+      ),
+  ]);
+  const nowValue = now?.value ?? 0;
+  const beforeValue = before?.value ?? 0;
+  const deltaPct = beforeValue <= 0 ? (nowValue > 0 ? 100 : 0) : Math.round(((nowValue - beforeValue) / beforeValue) * 100);
+  return { value: nowValue, deltaPct };
+}
 
 export async function getVisitors({
   organizationId,

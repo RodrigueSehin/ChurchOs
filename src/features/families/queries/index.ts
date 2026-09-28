@@ -1,10 +1,33 @@
 import "server-only";
-import { and, asc, count, eq, ilike } from "drizzle-orm";
+import { and, asc, count, eq, ilike, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { familyMembers, families, people } from "@/lib/db/schema";
 
 export const FAMILIES_PAGE_SIZE = 20;
+
+function daysAgoISO(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Utilisée par le tableau de bord et la page Membres (carte KPI "Familles") — voir la règle de
+ * façade cross-module dans 01-project-structure.md. */
+export async function getFamiliesKpi(organizationId: string) {
+  const cutoff30 = daysAgoISO(30);
+  const [[now], [before]] = await Promise.all([
+    db.select({ value: count() }).from(families).where(eq(families.organizationId, organizationId)),
+    db
+      .select({ value: count() })
+      .from(families)
+      .where(and(eq(families.organizationId, organizationId), sql`${families.createdAt}::date <= ${cutoff30}`)),
+  ]);
+  const nowValue = now?.value ?? 0;
+  const beforeValue = before?.value ?? 0;
+  const deltaPct = beforeValue <= 0 ? (nowValue > 0 ? 100 : 0) : Math.round(((nowValue - beforeValue) / beforeValue) * 100);
+  return { value: nowValue, deltaPct };
+}
 
 export async function getFamilies({
   organizationId,
