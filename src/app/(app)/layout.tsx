@@ -31,6 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           userName={displayName || user.email}
           userRole={current.membership.title}
           userInitials={initialsOf(displayName || user.email)}
+          userAvatarUrl={user.profile?.avatarUrl}
         />
         <main className="flex-1 overflow-y-auto">
           <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">

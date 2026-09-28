@@ -83,11 +83,11 @@ export async function getEventDetail(organizationId: string, eventId: string) {
   return { ...row, registrationCount };
 }
 
-/** Prochains événements publiés — utilisé par l'assistant ChurchOS AI (Phase 15), gaté sur
- * `events.view` par l'appelant. */
+/** Prochains événements publiés — utilisé par l'assistant ChurchOS AI (Phase 15) et le tableau de
+ * bord, gaté sur `events.view` par l'appelant. */
 export async function getUpcomingEvents(organizationId: string, limit = 5) {
   return db
-    .select({ id: events.id, title: events.title, startsAt: events.startsAt, location: events.location })
+    .select({ id: events.id, title: events.title, startsAt: events.startsAt, endsAt: events.endsAt, location: events.location })
     .from(events)
     .where(and(eq(events.organizationId, organizationId), eq(events.status, "published"), gte(events.startsAt, new Date())))
     .orderBy(asc(events.startsAt))

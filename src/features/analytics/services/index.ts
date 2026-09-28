@@ -10,5 +10,6 @@ export {
   getAverageRecentAttendance,
   getFinanceMonthlyTrend,
   getGivingThisMonth,
+  getMembershipGrowth,
   getNewMembersLast30Days,
 } from "@/features/analytics/queries";

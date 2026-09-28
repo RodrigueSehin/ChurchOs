@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, ChevronDown, LogOut } from "lucide-react";
+import { Bell, ChevronDown, Church, LogOut, Search } from "lucide-react";
 
 import { logout } from "@/features/auth/actions";
 import { MobileSidebar } from "@/components/shared/mobile-sidebar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,20 +23,34 @@ interface TopbarProps {
   userName: string;
   userRole?: string | null;
   userInitials: string;
+  userAvatarUrl?: string | null;
 }
 
-export function Topbar({ organizationName, organizationCity, userName, userRole, userInitials }: TopbarProps) {
+export function Topbar({ organizationName, organizationCity, userName, userRole, userInitials, userAvatarUrl }: TopbarProps) {
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 sm:px-6">
-      <div className="flex min-w-0 items-center gap-3">
-        <MobileSidebar />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-navy">{organizationName}</p>
-          {organizationCity && <p className="truncate text-xs text-slate-400">{organizationCity}</p>}
-        </div>
+    <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:gap-4 sm:px-6">
+      <MobileSidebar />
+
+      <div className="relative hidden max-w-md flex-1 md:block">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Rechercher un membre, un événement, un document..."
+          className="w-full rounded-lg border border-slate-200 bg-surface py-2 pl-9 pr-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+        />
       </div>
 
-      <div className="flex items-center gap-1.5 sm:gap-3">
+      <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-3">
+        <div className="hidden items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-3 sm:flex">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Church className="size-3.5" />
+          </span>
+          <div className="min-w-0 text-left">
+            <p className="truncate text-xs font-semibold leading-tight text-navy">{organizationName}</p>
+            {organizationCity && <p className="truncate text-[11px] leading-tight text-slate-400">{organizationCity}</p>}
+          </div>
+        </div>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Notifications">
@@ -56,6 +70,7 @@ export function Topbar({ organizationName, organizationCity, userName, userRole,
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 hover:bg-slate-100">
               <Avatar>
+                {userAvatarUrl && <AvatarImage src={userAvatarUrl} alt={userName} />}
                 <AvatarFallback>{userInitials}</AvatarFallback>
               </Avatar>
               <span className="hidden text-left sm:block">
