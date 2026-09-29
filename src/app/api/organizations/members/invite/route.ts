@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/reset-password/update`,
+    redirectTo: `${process.env.APP_URL}/auth/callback?next=/reset-password/update`,
   });
 
   let userId = invited?.user?.id;

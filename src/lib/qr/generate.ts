@@ -9,7 +9,7 @@ export function generateQrToken(): string {
 }
 
 export function getCheckInUrl(token: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const base = process.env.APP_URL ?? "http://localhost:3000";
   return `${base}/api/qr/${token}`;
 }
 

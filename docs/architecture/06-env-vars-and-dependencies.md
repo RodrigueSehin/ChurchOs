@@ -10,7 +10,7 @@ Voir [`../../.env.example`](../../.env.example) pour le fichier réel. Résumé 
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase | ✅ |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase (bypass RLS, server-only) | ❌ |
 | `DATABASE_URL` | Postgres direct (Drizzle migrations/queries serveur) | ❌ |
-| `NEXT_PUBLIC_APP_URL` | URL publique de l'app | ✅ |
+| `APP_URL` | URL de l'app (liens serveur : redirections, emails, QR) | ❌ |
 | `RESEND_API_KEY` | Email | ❌ |
 | `SMS_PROVIDER` / `SMS_API_KEY` / `SMS_SENDER_ID` | SMS (abstraction `SmsProvider`) | ❌ |
 | `WHATSAPP_BUSINESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp Business API | ❌ |

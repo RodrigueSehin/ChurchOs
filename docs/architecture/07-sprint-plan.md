@@ -175,7 +175,8 @@ Bugs réels trouvés et corrigés pendant la vérification en direct (pas en rev
 3. Bouton "Annuler" de `ConfirmDialog` (composant partagé depuis la Phase 1) sans effet en usage
    non contrôlé — corrigé (`DialogClose` au lieu d'un `onOpenChange` optionnel jamais fourni),
    bénéficie à tous les usages futurs du composant.
-4. `NEXT_PUBLIC_APP_URL` absent de `.env.local` — cassait déjà silencieusement le lien de
+4. `APP_URL` (alors nommée `NEXT_PUBLIC_APP_URL`, renommée en 2026-09 — voir plus bas) absente de
+   `.env.local` — cassait déjà silencieusement le lien de
    réinitialisation de mot de passe (Phase 3) et aurait cassé le lien d'invitation (Phase 4).
    Ajouté.
 
@@ -1155,3 +1156,26 @@ usage (motif jetable habituel) — à recréer au besoin, leur structure est dé
 contenu de documents uploadés — voir la décision d'architecture plus haut ; streaming de la réponse
 (SSE) ; export/partage d'une conversation ; suggestions de questions pré-remplies ; `lib/feature-
 flags/` (prévu depuis la Phase 4, toujours pas construit, hors du périmètre RBAC de cette phase).
+
+---
+
+**2026-09-29 — Premier déploiement Vercel, et renommage `NEXT_PUBLIC_APP_URL` → `APP_URL`** :
+l'application tourne maintenant en production sur Vercel (`church-os-puce.vercel.app`). Deux
+problèmes réels rencontrés et corrigés au passage, aucun des deux lié au code applicatif lui-même :
+1. **`DATABASE_URL` en connexion directe (`db.<ref>.supabase.co:5432`) injoignable depuis Vercel**
+   (`getaddrinfo ENOTFOUND`) — l'environnement serverless de Vercel ne résout pas correctement cet
+   hôte (limitation IPv6 connue, documentée par Supabase). Résolu en utilisant le **connection
+   pooler** Supavisor (`...pooler.supabase.com:6543`, mode Transaction) comme valeur de
+   `DATABASE_URL` sur Vercel uniquement — `.env.local` reste inchangé (la connexion directe
+   fonctionne pour le développement local). Le code n'a nécessité aucune modification :
+   `postgres(connectionString, { prepare: false })` dans `lib/db/client.ts` était déjà la
+   configuration requise pour ce mode.
+2. **`NEXT_PUBLIC_APP_URL` renommée en `APP_URL`** — Vercel a signalé que ce préfixe `NEXT_PUBLIC_`
+   n'avait pas de sens pour cette variable (elle expose sa valeur au bundle client sans qu'aucun
+   code ne la lise jamais côté navigateur). Vérification faite : ses 4 seuls usages
+   (`lib/qr/generate.ts`, `features/billing/actions`, `features/auth/actions`,
+   `api/organizations/members/invite/route.ts`) sont tous des contextes serveur uniquement
+   (`"server-only"`, Server Actions, Route Handler) — le préfixe public n'a jamais été nécessaire,
+   juste hérité d'une convention Next.js appliquée par réflexe. Renommée partout (code, `.env.example`,
+   `.env.local`, ce document) ; `docs/architecture/06-env-vars-and-dependencies.md` mis à jour en
+   conséquence (colonne "Exposée client ?" passée de ✅ à ❌).
