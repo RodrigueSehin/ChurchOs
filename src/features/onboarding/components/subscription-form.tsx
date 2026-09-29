@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Crown, Gem, Minus, Rocket, Sprout, Users2 } from "lucide-react";
+import Image from "next/image";
+import { Check, Crown, Gem, Minus, Sprout, Users2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/features/onboarding/store";
+import logo from "@/img/logo_churchos.png";
 
 type Support = "community" | "email" | "email_chat" | "dedicated";
 
@@ -262,11 +264,8 @@ function SubscriptionFields({ plans }: { plans: PlanOption[] }) {
               <p className="text-xs italic text-slate-500">
                 &ldquo;Une église bien organisée pour un plus grand impact.&rdquo;
               </p>
-              <div className="mt-2 flex items-center gap-2">
-                <span className="flex size-6 items-center justify-center rounded-full bg-navy text-[10px] font-semibold text-white">
-                  <Rocket className="size-3" />
-                </span>
-                <p className="text-xs font-medium text-navy">ChurchOS</p>
+              <div className="mt-2 flex items-center">
+                <Image src={logo} alt="ChurchOS" className="h-6 w-auto" />
               </div>
             </div>
           </aside>

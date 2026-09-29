@@ -1,5 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import { Church } from "lucide-react";
+import Image from "next/image";
+
+import logo from "@/img/logo_churchos_dark.png";
 
 export interface AuthHeroFeature {
   icon: LucideIcon;
@@ -41,14 +44,8 @@ export function AuthHero({ headline, quote, quoteRef, features, tagline }: AuthH
 
       <Church className="pointer-events-none absolute -bottom-16 -left-16 size-72 rotate-[-8deg] text-white/[0.04]" />
 
-      <div className="relative flex items-center gap-2.5">
-        <span className="flex size-9 items-center justify-center rounded-lg bg-white/10 text-white ring-1 ring-white/15">
-          <Church className="size-[18px]" />
-        </span>
-        <div>
-          <p className="text-lg font-semibold text-white">ChurchOS</p>
-          <p className="text-xs text-white/60">Le système d&apos;exploitation numérique de l&apos;Église.</p>
-        </div>
+      <div className="relative">
+        <Image src={logo} alt="ChurchOS" priority className="h-auto w-40" />
       </div>
 
       <div className="relative flex flex-col gap-8">

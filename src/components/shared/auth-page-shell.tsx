@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Church } from "lucide-react";
+import Image from "next/image";
 
 import { AuthHero, type AuthHeroProps } from "@/components/shared/auth-hero";
 import { LanguageBadge } from "@/components/shared/language-badge";
 import { cn } from "@/lib/utils";
+import logo from "@/img/logo_churchos.png";
 
 export interface AuthPageShellProps {
   hero: AuthHeroProps;
@@ -22,11 +23,8 @@ export function AuthPageShell({ hero, children, contentClassName }: AuthPageShel
 
       <div className="flex flex-1 flex-col">
         <div className="flex items-center justify-between px-4 pt-5 sm:px-6 lg:justify-end lg:px-10 lg:pt-6">
-          <Link href="/" className="flex items-center gap-2 lg:hidden">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-navy text-white">
-              <Church className="size-4" />
-            </span>
-            <span className="text-base font-semibold text-navy">ChurchOS</span>
+          <Link href="/" className="lg:hidden">
+            <Image src={logo} alt="ChurchOS" priority className="h-8 w-auto" />
           </Link>
           <LanguageBadge />
         </div>
