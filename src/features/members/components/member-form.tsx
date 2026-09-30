@@ -1,18 +1,20 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 import Link from "next/link";
-import { Mail, MapPin, Phone, User } from "lucide-react";
+import { ImagePlus, Mail, MapPin, Phone, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormSelect } from "@/components/shared/form-select";
 import { IconInput } from "@/components/shared/icon-input";
 import type { MemberActionState } from "@/features/members/actions";
 import { GENDER_LABELS, MEMBER_STATUS_LABELS } from "@/features/members/schemas";
 import type { members, people } from "@/lib/db/schema";
+import { MEMBER_PHOTO_MAX_BYTES } from "@/features/members/photo";
 
 type Action = (prev: MemberActionState, formData: FormData) => Promise<MemberActionState>;
 
@@ -35,6 +37,25 @@ export function MemberForm({
   const [state, formAction, pending] = useActionState(action, {});
   const person = initial?.person;
   const member = initial?.member;
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const shownPhoto = preview ?? (removePhoto ? null : person?.photoUrl ?? null);
+  const initials = `${person?.firstName?.[0] ?? ""}${person?.lastName?.[0] ?? ""}`.toUpperCase();
+
+  function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setPhotoError(null);
+    if (file && file.size > MEMBER_PHOTO_MAX_BYTES) {
+      setPhotoError("Photo trop volumineuse (2 Mo maximum).");
+      e.target.value = "";
+      setPreview(null);
+      return;
+    }
+    setPreview(file ? URL.createObjectURL(file) : null);
+    if (file) setRemovePhoto(false);
+  }
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -43,6 +64,29 @@ export function MemberForm({
           <CardTitle>Informations personnelles</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <div className="flex items-center gap-4">
+            <Avatar className="size-20 shrink-0 ring-2 ring-slate-100">
+              {shownPhoto && <AvatarImage src={shownPhoto} alt="" />}
+              <AvatarFallback className="text-xl">{initials || <User className="size-7" />}</AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col gap-1.5">
+              <input ref={photoInput} type="file" name="photo" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={onPhotoChange} />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => photoInput.current?.click()}>
+                  <ImagePlus className="size-4" />
+                  {person?.photoUrl || preview ? "Changer la photo" : "Ajouter une photo"}
+                </Button>
+                {person?.photoUrl && !preview && (
+                  <label className="flex items-center gap-1.5 text-sm text-slate-600">
+                    <input type="checkbox" name="removePhoto" checked={removePhoto} onChange={(e) => setRemovePhoto(e.target.checked)} />
+                    Retirer la photo
+                  </label>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">PNG, JPEG ou WebP, 2 Mo maximum (optionnel).</p>
+              {photoError && <p role="alert" className="text-xs text-danger">{photoError}</p>}
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="firstName">Prénom *</Label>

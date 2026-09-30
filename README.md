@@ -124,6 +124,18 @@ Profil > Avatar : 12 avatars prédéfinis (`public/avatars/*.svg`, un clic) ou p
 initiales s'affichent. Migration : [`db/migrations/2026-10-01-user-avatars.sql`](db/migrations/2026-10-01-user-avatars.sql)
 (idempotente, incluse dans `db/schema.sql`).
 
+### Photo des membres et téléversement de documents
+
+- **Photo d'un membre** : champ « Ajouter une photo » dans le formulaire de création/modification
+  (PNG/JPEG/WebP, 2 Mo, bucket public `churchos-member-photos`, stockée dans `people.photo_url`,
+  retrait possible). Migration à appliquer : [`db/migrations/2026-10-02-member-photos.sql`](db/migrations/2026-10-02-member-photos.sql)
+  (idempotente, incluse dans `db/schema.sql`).
+- **Téléversement de document** : le fichier part désormais directement du navigateur vers Supabase
+  Storage, puis une Server Action n'enregistre que les métadonnées (la limite de corps de requête
+  de Vercel, ~4,5 Mo, faisait planter l'ancien envoi avec « This page couldn't load »). Aucune
+  migration. Un `error.tsx` global à `(app)` affiche un message au lieu de la page d'erreur
+  générique. Vérifié par typecheck/lint uniquement — à tester en conditions réelles.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.

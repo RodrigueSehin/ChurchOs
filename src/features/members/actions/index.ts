@@ -6,6 +6,12 @@ import { redirect } from "next/navigation";
 import { checkPermission } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { memberFormSchema } from "@/features/members/schemas";
+import {
+  MEMBER_PHOTO_BUCKET,
+  MEMBER_PHOTO_MAX_BYTES,
+  MEMBER_PHOTO_MIME_EXTENSIONS,
+  memberPhotoStoragePath,
+} from "@/features/members/photo";
 
 export interface MemberActionState {
   error?: string;
@@ -41,6 +47,36 @@ function parseForm(formData: FormData) {
   });
 }
 
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/** Photo envoyée par le formulaire (`photo`) : `undefined` si aucun fichier choisi. */
+function photoFile(formData: FormData) {
+  const file = formData.get("photo");
+  return file instanceof File && file.size > 0 ? file : undefined;
+}
+
+function validatePhoto(file: File | undefined) {
+  if (!file) return null;
+  if (!MEMBER_PHOTO_MIME_EXTENSIONS[file.type]) return "Photo : format non accepté (PNG, JPEG ou WebP uniquement).";
+  if (file.size > MEMBER_PHOTO_MAX_BYTES) return "Photo trop volumineuse (2 Mo maximum).";
+  return null;
+}
+
+/** Envoie la photo et renvoie son URL publique (ou une erreur). */
+async function uploadMemberPhoto(supabase: Supabase, organizationId: string, personId: string, file: File) {
+  const path = `${organizationId}/${personId}/photo-${crypto.randomUUID()}.${MEMBER_PHOTO_MIME_EXTENSIONS[file.type]}`;
+  const { error } = await supabase.storage.from(MEMBER_PHOTO_BUCKET).upload(path, file, { contentType: file.type });
+  if (error) return { error: `Échec du téléversement de la photo : ${error.message}` };
+  return { url: supabase.storage.from(MEMBER_PHOTO_BUCKET).getPublicUrl(path).data.publicUrl, path };
+}
+
+async function removeMemberPhotoFile(supabase: Supabase, url: string | null | undefined) {
+  const path = memberPhotoStoragePath(url);
+  if (!path) return;
+  const { error } = await supabase.storage.from(MEMBER_PHOTO_BUCKET).remove([path]);
+  if (error) console.error("members: suppression de l'ancienne photo impossible", error.message);
+}
+
 export async function createMember(
   _prev: MemberActionState,
   formData: FormData,
@@ -52,6 +88,9 @@ export async function createMember(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
   const organizationId = check.organization.organization.id;
+  const photo = photoFile(formData);
+  const photoError = validatePhoto(photo);
+  if (photoError) return { error: photoError };
 
   const supabase = await createClient();
 
@@ -78,6 +117,21 @@ export async function createMember(
     .select("id")
     .single();
   if (personError) return { error: personError.message };
+
+  if (photo) {
+    const uploaded = await uploadMemberPhoto(supabase, organizationId, person.id, photo);
+    if ("error" in uploaded) {
+      // Le membre n'est pas encore créé : on retire la personne pour que l'utilisateur puisse réessayer.
+      await supabase.from("people").delete().eq("id", person.id).eq("organization_id", organizationId);
+      return { error: uploaded.error };
+    }
+    const { error: photoSaveError } = await supabase.from("people").update({ photo_url: uploaded.url }).eq("id", person.id);
+    if (photoSaveError) {
+      await supabase.storage.from(MEMBER_PHOTO_BUCKET).remove([uploaded.path]);
+      await supabase.from("people").delete().eq("id", person.id).eq("organization_id", organizationId);
+      return { error: photoSaveError.message };
+    }
+  }
 
   const { data: member, error: memberError } = await supabase
     .from("members")
@@ -116,6 +170,10 @@ export async function updateMember(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
   const organizationId = check.organization.organization.id;
+  const photo = photoFile(formData);
+  const photoError = validatePhoto(photo);
+  if (photoError) return { error: photoError };
+  const removePhoto = formData.get("removePhoto") === "on";
 
   const supabase = await createClient();
 
@@ -149,6 +207,36 @@ export async function updateMember(
     .eq("id", existing.person_id)
     .eq("organization_id", organizationId);
   if (personError) return { error: personError.message };
+
+  // Photo : remplacement, retrait, ou inchangée. L'ancien fichier n'est supprimé qu'une fois la
+  // nouvelle URL enregistrée (pas d'orphelin, pas de photo cassée).
+  if (photo || removePhoto) {
+    const { data: current } = await supabase
+      .from("people")
+      .select("photo_url")
+      .eq("id", existing.person_id)
+      .eq("organization_id", organizationId)
+      .single();
+    const previousPhotoUrl = current?.photo_url ?? null;
+    let nextUrl: string | null = null;
+    let uploadedPath: string | null = null;
+    if (photo) {
+      const uploaded = await uploadMemberPhoto(supabase, organizationId, existing.person_id, photo);
+      if ("error" in uploaded) return { error: uploaded.error };
+      nextUrl = uploaded.url;
+      uploadedPath = uploaded.path;
+    }
+    const { error: photoSaveError } = await supabase
+      .from("people")
+      .update({ photo_url: nextUrl })
+      .eq("id", existing.person_id)
+      .eq("organization_id", organizationId);
+    if (photoSaveError) {
+      if (uploadedPath) await supabase.storage.from(MEMBER_PHOTO_BUCKET).remove([uploadedPath]);
+      return { error: photoSaveError.message };
+    }
+    await removeMemberPhotoFile(supabase, previousPhotoUrl);
+  }
 
   const { error: memberError } = await supabase
     .from("members")
