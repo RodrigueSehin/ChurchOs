@@ -13,6 +13,19 @@ export const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
   late: "En retard",
 };
 
+export const ATTENDANCE_SOURCE_LABELS: Record<string, string> = {
+  event: "Événement",
+  service: "Service",
+};
+
+/** Dérivé de la session liée, jamais une colonne stockée. `attendance_sessions_context_check`
+ * impose qu'une session ait toujours un `event_id` et/ou un `service_id` — il n'existe donc pas de
+ * session "purement manuelle" ; "les deux" est possible (rare) et compte ici comme "event" pour
+ * l'affichage d'un badge unique. */
+export function attendanceSourceOf(row: { eventId: string | null; serviceId: string | null }): "event" | "service" {
+  return row.eventId ? "event" : "service";
+}
+
 export const attendanceSessionSchema = z
   .object({
     title: z.string().min(1, "Titre requis"),

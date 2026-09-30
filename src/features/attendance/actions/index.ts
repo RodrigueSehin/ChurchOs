@@ -47,9 +47,12 @@ export async function createAttendanceSession(_prev: AttendanceActionState, form
   return { success: true };
 }
 
-export async function markAttendance(sessionId: string, _prev: AttendanceActionState, formData: FormData): Promise<AttendanceActionState> {
+export async function recordAttendance(_prev: AttendanceActionState, formData: FormData): Promise<AttendanceActionState> {
   const check = await checkPermission("attendance.create");
   if (!check.allowed) return { error: "Vous n'avez pas la permission d'enregistrer une présence." };
+
+  const sessionId = formData.get("sessionId");
+  if (typeof sessionId !== "string" || !sessionId) return { error: "Session requise" };
 
   const parsed = markAttendanceSchema.safeParse({
     personId: formData.get("personId"),
@@ -71,6 +74,42 @@ export async function markAttendance(sessionId: string, _prev: AttendanceActionS
     },
     { onConflict: "session_id,person_id" },
   );
+  if (error) return { error: error.message };
+
+  revalidatePath("/attendance");
+  return { success: true };
+}
+
+export async function updateAttendanceRecordStatus(recordId: string, status: string): Promise<AttendanceActionState> {
+  const check = await checkPermission("attendance.create");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de modifier cette présence." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("attendance_records")
+    .update({ status })
+    .eq("id", recordId)
+    .eq("organization_id", check.organization.organization.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/attendance");
+  return { success: true };
+}
+
+/** Réservé aux admins — `attendance` n'a pas de permission `.delete` dédiée (seules `.view`/
+ * `.create` existent), même convention que la suppression d'une inscription. */
+export async function deleteAttendanceRecord(recordId: string): Promise<AttendanceActionState> {
+  const check = await checkPermission("attendance.create");
+  if (!check.allowed || !check.context.isAdmin) {
+    return { error: "Seul un administrateur de l'organisation peut supprimer une présence." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("attendance_records")
+    .delete()
+    .eq("id", recordId)
+    .eq("organization_id", check.organization.organization.id);
   if (error) return { error: error.message };
 
   revalidatePath("/attendance");
