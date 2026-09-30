@@ -108,6 +108,15 @@ flux de trésorerie, budgets par ministère. Chaque génération est tracée dan
 stocké). Les dépenses « en attente » sont comptées, les « rejetées » exclues. Aucune migration requise. Vérifié sur Postgres local (5 types × 4 formats, PDF relu en image) ;
 le téléchargement navigateur authentifié n'a pas été testé en conditions réelles.
 
+### Logo de l'église
+
+Paramètres > Église : téléversement du logo (PNG/JPEG/WebP, 2 Mo) dans le bucket public
+`churchos-logos`, URL stockée dans `organizations.logo_url`. S'il existe, il remplace le logo
+ChurchOS dans le menu latéral (bureau + mobile) et la pastille d'église de la barre du haut ; sans
+logo, ChurchOS s'affiche. La Vitrine et les pages d'authentification gardent toujours le logo
+ChurchOS. Migration : [`db/migrations/2026-10-01-organization-logos.sql`](db/migrations/2026-10-01-organization-logos.sql)
+(idempotente, incluse dans `db/schema.sql`).
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.

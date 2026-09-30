@@ -25,11 +25,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-dvh overflow-hidden">
-      <Sidebar isPlatformAdmin={platformAdmin} />
+      <Sidebar isPlatformAdmin={platformAdmin} organizationName={current.organization.name} organizationLogoUrl={current.organization.logoUrl} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           organizationName={current.organization.name}
           organizationCity={current.organization.city}
+          organizationLogoUrl={current.organization.logoUrl}
           userName={displayName || user.email}
           userRole={current.membership.title}
           userInitials={initialsOf(displayName || user.email)}

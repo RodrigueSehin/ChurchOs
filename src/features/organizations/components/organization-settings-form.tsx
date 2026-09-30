@@ -65,10 +65,6 @@ export function OrganizationSettingsForm({
           <Label htmlFor="website">Site web</Label>
           <IconInput icon={Globe} id="website" name="website" type="url" defaultValue={organization.website ?? ""} />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="logoUrl">URL du logo (optionnel)</Label>
-          <IconInput icon={Globe} id="logoUrl" name="logoUrl" type="url" defaultValue={organization.logoUrl ?? ""} />
-        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">

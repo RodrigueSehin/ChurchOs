@@ -29,7 +29,6 @@ export async function updateOrganization(
     email: formData.get("email"),
     phone: formData.get("phone"),
     website: formData.get("website"),
-    logoUrl: formData.get("logoUrl"),
     addressLine1: formData.get("addressLine1"),
     city: formData.get("city"),
     region: formData.get("region"),
@@ -53,7 +52,6 @@ export async function updateOrganization(
       email: orDbNull(v.email),
       phone: orDbNull(v.phone),
       website: orDbNull(v.website),
-      logo_url: orDbNull(v.logoUrl),
       address_line1: orDbNull(v.addressLine1),
       city: orDbNull(v.city),
       region: orDbNull(v.region),
@@ -68,6 +66,70 @@ export async function updateOrganization(
 
   revalidatePath("/settings/church");
   return { success: true };
+}
+
+const LOGO_BUCKET = "churchos-logos";
+const LOGO_MIME_EXTENSIONS: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Chemin Storage d'un logo de NOTRE bucket à partir de son URL publique (sinon `null` : URL
+ * externe saisie à l'ancienne, qu'on ne touche pas). */
+function logoStoragePath(url: string | null) {
+  const marker = `/object/public/${LOGO_BUCKET}/`;
+  const i = url?.indexOf(marker) ?? -1;
+  return url && i >= 0 ? decodeURIComponent(url.slice(i + marker.length)) : null;
+}
+
+export interface LogoActionState extends OrgActionState {
+  logoUrl?: string | null;
+}
+
+export async function uploadOrganizationLogo(_prev: LogoActionState, formData: FormData): Promise<LogoActionState> {
+  const check = await checkPermission("settings.manage");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de modifier le logo." };
+
+  const file = formData.get("logo");
+  if (!(file instanceof File) || file.size === 0) return { error: "Sélectionnez une image." };
+  const extension = LOGO_MIME_EXTENSIONS[file.type];
+  if (!extension) return { error: "Format non accepté (PNG, JPEG ou WebP uniquement)." };
+  if (file.size > LOGO_MAX_BYTES) return { error: "Image trop volumineuse (2 Mo maximum)." };
+
+  const organization = check.organization.organization;
+  const path = `${organization.id}/logo-${crypto.randomUUID()}.${extension}`;
+  const supabase = await createClient();
+
+  const { error: uploadError } = await supabase.storage.from(LOGO_BUCKET).upload(path, file, { contentType: file.type });
+  if (uploadError) return { error: `Échec du téléversement : ${uploadError.message}` };
+
+  const { data } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(path);
+  const { error } = await supabase.from("organizations").update({ logo_url: data.publicUrl }).eq("id", organization.id);
+  if (error) {
+    await supabase.storage.from(LOGO_BUCKET).remove([path]);
+    return { error: error.message };
+  }
+
+  // Ancien logo hébergé chez nous : supprimé une fois le nouveau en place (pas d'orphelin).
+  const previous = logoStoragePath(organization.logoUrl);
+  if (previous) await supabase.storage.from(LOGO_BUCKET).remove([previous]);
+
+  revalidatePath("/", "layout");
+  return { success: true, logoUrl: data.publicUrl };
+}
+
+export async function removeOrganizationLogo(): Promise<LogoActionState> {
+  const check = await checkPermission("settings.manage");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de modifier le logo." };
+
+  const organization = check.organization.organization;
+  const supabase = await createClient();
+  const { error } = await supabase.from("organizations").update({ logo_url: null }).eq("id", organization.id);
+  if (error) return { error: error.message };
+
+  const previous = logoStoragePath(organization.logoUrl);
+  if (previous) await supabase.storage.from(LOGO_BUCKET).remove([previous]);
+
+  revalidatePath("/", "layout");
+  return { success: true, logoUrl: null };
 }
 
 export async function createCampus(_prev: OrgActionState, formData: FormData): Promise<OrgActionState> {

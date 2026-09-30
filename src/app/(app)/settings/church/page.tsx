@@ -4,6 +4,7 @@ import { PermissionDenied } from "@/components/shared/permission-denied";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { getCampuses, getOrganizationDetail } from "@/features/organizations/queries";
 import { OrganizationSettingsForm } from "@/features/organizations/components/organization-settings-form";
+import { OrganizationLogoUploader } from "@/features/organizations/components/organization-logo-uploader";
 import { CampusManager } from "@/features/organizations/components/campus-manager";
 
 export default async function ChurchSettingsPage() {
@@ -46,6 +47,16 @@ export default async function ChurchSettingsPage() {
         </CardHeader>
         <CardContent>
           <OrganizationSettingsForm organization={organization} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Logo de l&apos;église</CardTitle>
+          <CardDescription>Affiché à la place du logo ChurchOS dans le menu et la barre du haut de l&apos;application.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <OrganizationLogoUploader organizationName={organization.name} logoUrl={organization.logoUrl} />
         </CardContent>
       </Card>
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Bell, ChevronDown, Church, LogOut, Search } from "lucide-react";
 
 import { logout } from "@/features/auth/actions";
+import { ChurchLogo } from "@/components/shared/church-logo";
 import { MobileSidebar } from "@/components/shared/mobile-sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -20,16 +21,17 @@ import { settingsNav } from "@/lib/navigation";
 interface TopbarProps {
   organizationName: string;
   organizationCity?: string | null;
+  organizationLogoUrl?: string | null;
   userName: string;
   userRole?: string | null;
   userInitials: string;
   userAvatarUrl?: string | null;
 }
 
-export function Topbar({ organizationName, organizationCity, userName, userRole, userInitials, userAvatarUrl }: TopbarProps) {
+export function Topbar({ organizationName, organizationCity, organizationLogoUrl, userName, userRole, userInitials, userAvatarUrl }: TopbarProps) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:gap-4 sm:px-6">
-      <MobileSidebar />
+      <MobileSidebar organizationName={organizationName} organizationLogoUrl={organizationLogoUrl} />
 
       <div className="relative hidden max-w-md flex-1 md:block">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -42,9 +44,13 @@ export function Topbar({ organizationName, organizationCity, userName, userRole,
 
       <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-3">
         <div className="hidden items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-3 sm:flex">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Church className="size-3.5" />
-          </span>
+          {organizationLogoUrl ? (
+            <ChurchLogo url={organizationLogoUrl} name={organizationName} className="size-7 rounded-full border border-slate-100 p-0.5" imgClassName="max-h-6 max-w-6" />
+          ) : (
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Church className="size-3.5" />
+            </span>
+          )}
           <div className="min-w-0 text-left">
             <p className="truncate text-xs font-semibold leading-tight text-navy">{organizationName}</p>
             {organizationCity && <p className="truncate text-[11px] leading-tight text-slate-400">{organizationCity}</p>}
