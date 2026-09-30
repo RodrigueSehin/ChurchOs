@@ -97,3 +97,7 @@ for delete using (
   bucket_id = 'churchos-finance'
   and public.is_org_admin((storage.foldername(name))[1]::uuid)
 );
+
+-- Demande à l'API Supabase (PostgREST) de recharger son cache de schéma : sans cela, les nouvelles
+-- colonnes restent introuvables ("Could not find the '...' column ... in the schema cache").
+notify pgrst, 'reload schema';

@@ -96,6 +96,9 @@ Le champ « Ministère / Projet » ajoute `budgets.ministry_id` :
 [`db/migrations/2026-09-30-budget-ministry.sql`](db/migrations/2026-09-30-budget-ministry.sql)
 (à appliquer aussi ; sans elle, créer un budget avec un ministère échoue).
 
+> Après une migration, si l'app affiche « Could not find the '…' column … in the schema cache », exécuter
+> `notify pgrst, 'reload schema';` dans le SQL Editor (les migrations ci-dessus le font déjà).
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
