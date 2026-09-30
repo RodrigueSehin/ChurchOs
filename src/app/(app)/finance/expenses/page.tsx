@@ -27,7 +27,7 @@ import { DonationsMonthlyChart } from "@/features/finance/components/donations-m
 import { DonationsCategoryDonut } from "@/features/finance/components/donations-category-donut";
 import { RecentExpensesCard } from "@/features/finance/components/recent-expenses-card";
 import { BudgetProgressCard } from "@/features/finance/components/budget-progress-card";
-import { TransactionFormDialog } from "@/features/finance/components/transaction-form-dialog";
+import { ExpenseFormDialog } from "@/features/finance/components/expense-form-dialog";
 import { FinanceSetupManager } from "@/features/finance/components/finance-setup-manager";
 
 const EXPENSE_BAR_COLORS = ["#F43F5E"];
@@ -103,7 +103,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
 
   const hasFilters = Boolean(params.q || params.category || params.fund || params.method || params.from || params.to);
   const newExpense = canCreate ? (
-    <TransactionFormDialog type="expense" triggerLabel="Nouvelle dépense" categories={categories} funds={funds} accounts={accounts} people={[]} />
+    <ExpenseFormDialog categories={categories} funds={funds} accounts={accounts} currency={currency} />
   ) : undefined;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
