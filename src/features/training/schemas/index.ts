@@ -15,7 +15,8 @@ export const ENROLLMENT_STATUS_LABELS: Record<string, string> = {
   pending: "En attente",
 };
 
-export const COURSE_CATEGORIES = [
+/** Catégories créées par défaut pour une organisation qui n'en a encore aucune. */
+export const DEFAULT_COURSE_CATEGORIES = [
   "Fondements de la foi",
   "Vie de prière",
   "Discipolat",
@@ -104,3 +105,17 @@ export const certificationSchema = z.object({
   credentialUrl: optionalString,
 });
 export type CertificationInput = z.infer<typeof certificationSchema>;
+
+export const courseCategorySchema = z.object({
+  name: z.string().trim().min(1, "Nom requis").max(60, "60 caractères maximum"),
+});
+
+/** URL d'image externe facultative : http(s) uniquement (jamais `javascript:` ni `data:`). */
+export function isHttpUrl(value: string) {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

@@ -41,6 +41,19 @@ export const courses = pgTable("courses", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const courseCategories = pgTable(
+  "course_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("course_categories_org_name_unique").on(table.organizationId, table.name)],
+);
+
 export const courseModules = pgTable("course_modules", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id")

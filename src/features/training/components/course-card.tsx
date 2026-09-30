@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BookOpen, CheckCircle2, Clock, GraduationCap, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { EnrollButton } from "@/features/training/components/enroll-button";
 import { cn } from "@/lib/utils";
 import type { getCourseCards } from "@/features/training/queries";
 
@@ -16,7 +17,7 @@ export function formatDuration(minutes: number) {
 }
 
 /** Carte d'un cours : visuel, titre, modules/durée, progression de l'utilisateur et bouton d'action. */
-export function CourseCard({ course }: { course: CourseCardData }) {
+export function CourseCard({ course, canSelfEnroll }: { course: CourseCardData; canSelfEnroll: boolean }) {
   const progress = course.my?.progress ?? 0;
   const done = course.my?.status === "completed" || progress >= 100;
   const started = Boolean(course.my) && !done && progress > 0;
@@ -28,7 +29,8 @@ export function CourseCard({ course }: { course: CourseCardData }) {
       ? { label: "Continuer", className: "bg-navy text-white hover:bg-navy/90" }
       : enrolled
         ? { label: "Commencer", className: "bg-primary/10 text-primary hover:bg-primary/15" }
-        : { label: "Voir le cours", className: "bg-slate-100 text-navy hover:bg-slate-200" };
+        : { label: course.status === "published" && !course.allowEnrollment ? "Inscriptions fermées" : "Voir le cours", className: "bg-slate-100 text-navy hover:bg-slate-200" };
+  const showEnroll = !enrolled && canSelfEnroll && course.status === "published" && course.allowEnrollment;
 
   return (
     <article className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
@@ -78,6 +80,9 @@ export function CourseCard({ course }: { course: CourseCardData }) {
               <span className="text-xs font-medium text-slate-500">{progress}%</span>
             </div>
           )}
+          {showEnroll ? (
+            <EnrollButton courseId={course.id} />
+          ) : (
           <Link
             href={`/training/${course.id}`}
             className={cn("inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors", action.className)}
@@ -85,6 +90,7 @@ export function CourseCard({ course }: { course: CourseCardData }) {
             {action.icon && <action.icon className="size-4" />}
             {action.label}
           </Link>
+          )}
         </div>
       </div>
     </article>

@@ -2,7 +2,8 @@ import "server-only";
 import { and, asc, count, desc, eq, ilike, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { certifications, courseEnrollments, courseModules, courses, people } from "@/lib/db/schema";
+import { certifications, courseCategories, courseEnrollments, courseModules, courses, people } from "@/lib/db/schema";
+import { DEFAULT_COURSE_CATEGORIES } from "@/features/training/schemas";
 
 export async function getCourseDetail(organizationId: string, courseId: string) {
   const [course] = await db
@@ -192,6 +193,7 @@ export async function getCourseCards({
       imageUrl: courses.imageUrl,
       durationMinutes: courses.durationMinutes,
       createdAt: courses.createdAt,
+      allowEnrollment: courses.allowEnrollment,
       instructorFirstName: people.firstName,
       instructorLastName: people.lastName,
     })
@@ -315,4 +317,38 @@ export async function getInstructors(organizationId: string, limit = 4) {
     .groupBy(people.id, people.firstName, people.lastName, people.photoUrl)
     .orderBy(desc(count()))
     .limit(limit);
+}
+
+/** Catégories de l'organisation ; une organisation qui n'en a aucune reçoit les catégories par défaut
+ * (insertion idempotente, `unique (organization_id, name)`). */
+export async function getCourseCategories(organizationId: string) {
+  const list = () =>
+    db
+      .select({ id: courseCategories.id, name: courseCategories.name })
+      .from(courseCategories)
+      .where(eq(courseCategories.organizationId, organizationId))
+      .orderBy(asc(courseCategories.name));
+
+  const existing = await list();
+  if (existing.length > 0) return existing;
+  await db
+    .insert(courseCategories)
+    .values(DEFAULT_COURSE_CATEGORIES.map((name) => ({ organizationId, name })))
+    .onConflictDoNothing();
+  return list();
+}
+
+export async function getMyEnrollment(organizationId: string, courseId: string, personId: string | null) {
+  if (!personId) return null;
+  const [row] = await db
+    .select({ status: courseEnrollments.status, progress: courseEnrollments.progress })
+    .from(courseEnrollments)
+    .where(
+      and(
+        eq(courseEnrollments.organizationId, organizationId),
+        eq(courseEnrollments.courseId, courseId),
+        eq(courseEnrollments.personId, personId),
+      ),
+    );
+  return row ?? null;
 }

@@ -25,7 +25,6 @@ import { FormSelect } from "@/components/shared/form-select";
 import { IconInput } from "@/components/shared/icon-input";
 import type { TrainingActionState } from "@/features/training/actions";
 import {
-  COURSE_CATEGORIES,
   COURSE_COVER_MAX_BYTES,
   COURSE_LEVELS,
   COURSE_STATUS_LABELS,
@@ -71,11 +70,17 @@ export function CourseFormDialog({
   people,
   course,
   trigger,
+  categories,
+  moduleCount: existingModuleCount = 0,
 }: {
   action: (prev: TrainingActionState, formData: FormData) => Promise<TrainingActionState>;
   people: { id: string; name: string }[];
   course?: typeof courses.$inferSelect;
   trigger?: React.ReactNode;
+  /** Noms des catégories de l'organisation (la catégorie actuelle du cours est toujours proposée). */
+  categories: string[];
+  /** Modification : nombre de modules existants (affichage seul — ils se gèrent dans la fiche). */
+  moduleCount?: number;
 }) {
   const editing = Boolean(course);
   const [open, setOpen] = useState(false);
@@ -164,7 +169,7 @@ export function CourseFormDialog({
                 <Label htmlFor="course-category">Catégorie *</Label>
                 <FormSelect id="course-category" name="category" value={category} onChange={(e) => setCategory(e.target.value)} required>
                   <option value="">Sélectionner une catégorie</option>
-                  {COURSE_CATEGORIES.map((c) => (
+                  {(course?.category && !categories.includes(course.category) ? [course.category, ...categories] : categories).map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </FormSelect>
@@ -236,6 +241,11 @@ export function CourseFormDialog({
                     <IconInput icon={Clock} id="course-module-minutes" name="moduleMinutes" type="number" min={0} value={moduleMinutes} onChange={(e) => setModuleMinutes(e.target.value)} placeholder="Minutes, ex : 120" />
                   </div>
                 </>
+              )}
+              {editing && (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 sm:col-span-2">
+                  {existingModuleCount} module{existingModuleCount > 1 ? "s" : ""} — à ajouter, modifier ou supprimer dans la fiche du cours.
+                </p>
               )}
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="course-level">Niveau *</Label>
@@ -348,11 +358,24 @@ export function CourseFormDialog({
                 </label>
               )}
               {coverError && <p role="alert" className="mb-2 text-xs text-danger">{coverError}</p>}
+              {!preview && (
+                <div className="mb-3 flex flex-col gap-1">
+                  <Label htmlFor="course-image-url" className="text-xs">ou URL d&apos;une image (optionnel)</Label>
+                  <Input
+                    id="course-image-url"
+                    name="imageUrl"
+                    type="url"
+                    defaultValue={course?.imageUrl && !course.imageUrl.includes("/object/public/churchos-course-covers/") ? course.imageUrl : ""}
+                    placeholder="https://..."
+                    className="h-9 text-xs"
+                  />
+                </div>
+              )}
               <div className="flex flex-col gap-3">
                 <PreviewRow icon={BookOpen} label="Titre" value={title} />
                 <PreviewRow icon={Tag} label="Catégorie" value={category} />
                 <PreviewRow icon={UserIcon} label="Formateur" value={nameOf(instructorId)} />
-                <PreviewRow icon={Layers} label="Modules" value={editing ? "" : moduleCount} />
+                <PreviewRow icon={Layers} label="Modules" value={editing ? String(existingModuleCount) : moduleCount} />
                 <PreviewRow icon={Clock} label="Durée totale" value={totalMinutes ? formatDuration(totalMinutes) : ""} />
                 <PreviewRow icon={BarChart3} label="Niveau" value={COURSE_LEVELS[level] ?? ""} />
               </div>

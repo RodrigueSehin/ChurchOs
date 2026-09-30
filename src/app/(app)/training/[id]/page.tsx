@@ -7,7 +7,8 @@ import { PermissionDenied } from "@/components/shared/permission-denied";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCourseDetail } from "@/features/training/queries";
+import { getCourseCategories, getCourseDetail, getMyEnrollment, getPersonIdForUser } from "@/features/training/queries";
+import { EnrollButton } from "@/features/training/components/enroll-button";
 import { getPeopleForSelect } from "@/features/members/services";
 import { updateCourse } from "@/features/training/actions";
 import { COURSE_STATUS_LABELS } from "@/features/training/schemas";
@@ -45,9 +46,12 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
 
   const { id } = await params;
   const organizationId = check.organization.organization.id;
-  const [detail, people] = await Promise.all([
+  const personId = await getPersonIdForUser(organizationId, check.user.email);
+  const [detail, people, categories, myEnrollment] = await Promise.all([
     getCourseDetail(organizationId, id),
     getPeopleForSelect(organizationId),
+    getCourseCategories(organizationId),
+    getMyEnrollment(organizationId, id, personId),
   ]);
   if (!detail) notFound();
 
@@ -63,10 +67,15 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
         description={<Badge variant={STATUS_VARIANT[course.status] ?? "secondary"}>{COURSE_STATUS_LABELS[course.status] ?? course.status}</Badge>}
         actions={
           <div className="flex items-center gap-2">
+            {personId && !myEnrollment && course.status === "published" && course.allowEnrollment && (
+              <EnrollButton courseId={course.id} />
+            )}
             {canManage && (
               <CourseFormDialog
                 action={updateCourse.bind(null, course.id)}
                 people={people}
+                categories={categories.map((c) => c.name)}
+                moduleCount={modules.length}
                 course={course}
                 trigger={
                   <Button type="button" variant="secondary" size="sm">

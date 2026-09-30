@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getCourseCards,
+  getCourseCategories,
   getInstructors,
   getMyTrainingOverview,
   getPersonIdForUser,
@@ -23,6 +24,7 @@ import { COURSE_STATUS_LABELS } from "@/features/training/schemas";
 import { getPeopleForSelect } from "@/features/members/services";
 import { createCourse } from "@/features/training/actions";
 import { CourseCard } from "@/features/training/components/course-card";
+import { CourseCategoryManager } from "@/features/training/components/course-category-manager";
 import { CoursesToolbar } from "@/features/training/components/courses-toolbar";
 import { MyProgressCard } from "@/features/training/components/my-progress-card";
 import { CourseFormDialog } from "@/features/training/components/course-form-dialog";
@@ -62,20 +64,28 @@ export default async function TrainingPage({
 
   const personId = await getPersonIdForUser(organizationId, check.user.email);
 
-  const [kpis, cards, overview, recent, instructors, people] = await Promise.all([
+  const [kpis, cards, overview, recent, instructors, people, categories] = await Promise.all([
     getTrainingKpis(organizationId),
     getCourseCards({ organizationId, personId, search: params.q, view, sort, page, includeHidden: canCreate }),
     personId ? getMyTrainingOverview(organizationId, personId) : Promise.resolve(null),
     getRecentCourses(organizationId, 4),
     getInstructors(organizationId, 4),
     canCreate ? getPeopleForSelect(organizationId) : Promise.resolve([]),
+    getCourseCategories(organizationId),
   ]);
 
   return (
     <div className="flex flex-col gap-6">
       <PageHero
         {...HERO}
-        actions={canCreate ? <CourseFormDialog action={createCourse} people={people} /> : undefined}
+        actions={
+          canCreate ? (
+            <div className="flex items-center gap-2">
+              <CourseCategoryManager categories={categories} />
+              <CourseFormDialog action={createCourse} people={people} categories={categories.map((c) => c.name)} />
+            </div>
+          ) : undefined
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -129,7 +139,7 @@ export default async function TrainingPage({
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {cards.rows.map((course) => (
-                  <CourseCard key={course.id} course={course} />
+                  <CourseCard key={course.id} course={course} canSelfEnroll={Boolean(personId)} />
                 ))}
               </div>
             )}

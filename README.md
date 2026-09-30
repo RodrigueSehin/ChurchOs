@@ -157,11 +157,22 @@ et visibilité) avec aperçu en direct et image de couverture (PNG/JPEG/WebP, 2 
 publication, co-formateurs, `allow_enrollment`, `show_in_library`. À la création, « Nombre de
 modules » génère « Module 1 » … « Module N » (durée par module optionnelle, durée du cours = somme) ;
 ces deux champs n'apparaissent pas à la modification (les modules se gèrent dans la fiche du cours).
-**Migration à appliquer** : [`db/migrations/2026-10-03-course-form-fields.sql`](db/migrations/2026-10-03-course-form-fields.sql)
-(idempotente, incluse dans `db/schema.sql`). « Afficher dans la bibliothèque » masque le cours aux
-non-gestionnaires ; « Autoriser l'inscription » est enregistré mais pas encore appliqué (il n'existe
-pas d'auto-inscription : les inscriptions sont faites par un gestionnaire). Vérifié par
-typecheck/lint uniquement.
+**Migrations à appliquer, dans l'ordre** : [`2026-10-03-course-form-fields.sql`](db/migrations/2026-10-03-course-form-fields.sql)
+puis [`2026-10-04-course-categories.sql`](db/migrations/2026-10-04-course-categories.sql) (idempotentes,
+incluses dans `db/schema.sql`).
+
+- **Catégories modifiables** : table `course_categories` (bouton « Catégories » de la bannière :
+  ajout/suppression). Une organisation sans catégorie reçoit les 8 catégories par défaut à la première
+  ouverture ; supprimer une catégorie ne change pas les cours qui la portent (`courses.category` est un texte).
+- **Inscription** : bouton « S'inscrire » (carte de cours et fiche du cours) qui inscrit le membre
+  connecté (`enrollSelf`) ; refusé côté serveur si le cours n'est pas publié ou si « Autoriser
+  l'inscription » est désactivé. Les gestionnaires (`training.enroll`) inscrivent toujours qui ils veulent.
+  Sans fiche `people` ayant le même email que le compte, l'auto-inscription est indisponible.
+- **Bibliothèque** : « Afficher dans la bibliothèque » désactivé = cours masqué aux non-gestionnaires.
+- **Image** : téléversement ou URL http(s) externe ; les modules d'un cours existant se gèrent dans sa fiche
+  (le formulaire de modification en indique le nombre).
+
+Vérifié par typecheck/lint uniquement.
 
 ### Reste à faire
 
