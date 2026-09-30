@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { organizationMemberships, organizations, profiles } from "@/lib/db/schema";
 import { createClient } from "@/lib/supabase/server";
-import { isPlatformAdmin } from "./platform";
+import { isPlatformAdmin } from "./platform-admin";
 
 export interface CurrentUser {
   id: string;

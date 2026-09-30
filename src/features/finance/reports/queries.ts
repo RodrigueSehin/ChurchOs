@@ -3,17 +3,16 @@ import { and, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { auditLogs, budgetLines, budgets, financeCategories, financialTransactions, funds, ministries, profiles } from "@/lib/db/schema";
+import { UUID_RE, isValidIsoDate, pctDelta } from "@/features/finance/utils";
 import type { Cell, FinancialReport, ReportParams, ReportSection, ReportType } from "./types";
 import { REPORT_TYPE_LABELS } from "./types";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const REPORT_RUN_ACTION = "finance.report.generated";
 
 export function normalizeParams(input: { from?: string; to?: string; categoryId?: string; fundId?: string }): ReportParams {
   const year = new Date().getUTCFullYear();
-  const from = input.from && DATE_RE.test(input.from) ? input.from : `${year}-01-01`;
-  const to = input.to && DATE_RE.test(input.to) ? input.to : `${year}-12-31`;
+  const from = isValidIsoDate(input.from) ? input.from : `${year}-01-01`;
+  const to = isValidIsoDate(input.to) ? input.to : `${year}-12-31`;
   return {
     from: from <= to ? from : to,
     to: from <= to ? to : from,
@@ -33,11 +32,6 @@ function previousPeriod(from: string, to: string) {
   const days = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
   const prevTo = addDays(from, -1);
   return { from: addDays(prevTo, -(days - 1)), to: prevTo };
-}
-
-function pctDelta(current: number, previous: number): number {
-  if (previous <= 0) return current > 0 ? 100 : 0;
-  return Math.round(((current - previous) / previous) * 100);
 }
 
 function txConditions(organizationId: string, p: { from: string; to: string; categoryId?: string; fundId?: string }) {
@@ -363,4 +357,3 @@ export async function logReportRun(organizationId: string, userId: string, meta:
 }
 
 export type { Cell };
-export { pctDelta };

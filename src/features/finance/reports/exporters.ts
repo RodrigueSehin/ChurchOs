@@ -9,13 +9,17 @@ const unit = (currency: string) => (currency === "XOF" || currency === "XAF" ? "
 
 /** Espace normal comme séparateur de milliers : les polices PDF intégrées (WinAnsi) ne savent pas
  * rendre l'espace fine insécable que produit `Intl` en fr-FR. */
-function groupThousands(value: number) {
-  return String(Math.round(Math.abs(value))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+function groupThousands(value: number, decimals: number) {
+  const [int, frac] = Math.abs(value).toFixed(decimals).split(".") as [string, string | undefined];
+  return int.replace(/\B(?=(\d{3})+(?!\d))/g, " ") + (frac ? `,${frac}` : "");
 }
 
-function formatCell(value: Cell | undefined, column: ReportColumn) {
+/** Le franc CFA n'a pas de centimes ; EUR/USD en ont — arrondir à l'unité fausserait les montants. */
+const decimalsFor = (currency: string) => (currency === "XOF" || currency === "XAF" ? 0 : 2);
+
+function formatCell(value: Cell | undefined, column: ReportColumn, decimals = 0) {
   if (value === null || value === undefined) return "—";
-  if (column.kind === "money") return `${Number(value) < 0 ? "-" : ""}${groupThousands(Number(value))}`;
+  if (column.kind === "money") return `${Number(value) < 0 ? "-" : ""}${groupThousands(Number(value), decimals)}`;
   if (column.kind === "percent") return `${Number(value)}%`;
   if (column.kind === "number") return String(value);
   return String(value);
@@ -71,17 +75,31 @@ export function toJson(report: FinancialReport): Buffer {
 // ---------------------------------------------------------------------------------------------
 // CSV (BOM UTF-8 pour Excel)
 // ---------------------------------------------------------------------------------------------
+/** Neutralise l'injection de formule (CSV/Excel) : un texte saisi par un utilisateur (nom de
+ * catégorie, fonds, ministère...) commençant par = + - @ ou une tabulation serait évalué comme
+ * formule à l'ouverture. On préfixe d'une apostrophe, convention reconnue par Excel et Sheets. */
+function safeText(value: string) {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
+/** Texte d'une cellule CSV : le contenu saisi par un utilisateur est neutralisé (les `.xlsx`
+ * écrivent des chaînes, jamais des formules, ils n'en ont pas besoin). */
+function csvText(value: Cell | undefined, column: ReportColumn, decimals: number) {
+  const text = formatCell(value, column, decimals);
+  return column.kind === "text" ? safeText(text) : text;
+}
+
 function csvCell(value: string) {
   return /[",\n;]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 export function toCsv(report: FinancialReport): Buffer {
-  const lines: string[] = [csvCell(report.title), csvCell(subtitle(report)), ""];
-  for (const [label, value, kind] of summaryRows(report)) lines.push([csvCell(label), csvCell(formatCell(value, { key: "", label: "", kind }))].join(","));
+  const lines: string[] = [csvCell(safeText(report.title)), csvCell(safeText(subtitle(report))), ""];
+  for (const [label, value, kind] of summaryRows(report)) lines.push([csvCell(label), csvCell(formatCell(value, { key: "", label: "", kind }, decimalsFor(report.currency)))].join(","));
   for (const section of report.sections) {
-    lines.push("", csvCell(section.title), section.columns.map((c) => csvCell(c.label)).join(","));
-    for (const row of section.rows) lines.push(section.columns.map((c) => csvCell(formatCell(row[c.key], c))).join(","));
-    if (section.footer) lines.push(section.columns.map((c) => csvCell(formatCell(section.footer![c.key], c))).join(","));
+    lines.push("", csvCell(safeText(section.title)), section.columns.map((c) => csvCell(c.label)).join(","));
+    for (const row of section.rows) lines.push(section.columns.map((c) => csvCell(csvText(row[c.key], c, decimalsFor(report.currency)))).join(","));
+    if (section.footer) lines.push(section.columns.map((c) => csvCell(csvText(section.footer![c.key], c, decimalsFor(report.currency)))).join(","));
   }
   return Buffer.from("﻿" + lines.join("\r\n"), "utf-8");
 }
@@ -169,7 +187,7 @@ export async function toPdf(report: FinancialReport): Promise<Buffer> {
     const x = left + i * cardW;
     doc.roundedRect(x + 2, cardsY, cardW - 4, 46, 4).fill("#F1F5F9");
     doc.fillColor("#64748B").font("Helvetica").fontSize(7.5).text(label, x + 8, cardsY + 7, { width: cardW - 16 });
-    doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11).text(formatCell(value, { key: "", label: "", kind }) + (kind === "money" ? ` ${unit(report.currency)}` : ""), x + 8, cardsY + 25, { width: cardW - 16 });
+    doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11).text(formatCell(value, { key: "", label: "", kind }, decimalsFor(report.currency)) + (kind === "money" ? ` ${unit(report.currency)}` : ""), x + 8, cardsY + 25, { width: cardW - 16 });
   });
   doc.y = cardsY + 62;
 
@@ -201,8 +219,8 @@ export async function toPdf(report: FinancialReport): Promise<Buffer> {
     };
 
     drawRow(section.columns.map((c) => c.label), { header: true });
-    section.rows.forEach((row, i) => drawRow(section.columns.map((c) => formatCell(row[c.key], c)), { shade: i % 2 === 1 }));
-    if (section.footer) drawRow(section.columns.map((c) => formatCell(section.footer![c.key], c)), { bold: true });
+    section.rows.forEach((row, i) => drawRow(section.columns.map((c) => formatCell(row[c.key], c, decimalsFor(report.currency))), { shade: i % 2 === 1 }));
+    if (section.footer) drawRow(section.columns.map((c) => formatCell(section.footer![c.key], c, decimalsFor(report.currency))), { bold: true });
     doc.moveDown(1.2);
   }
 

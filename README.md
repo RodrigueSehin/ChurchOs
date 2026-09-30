@@ -85,7 +85,7 @@ uniquement — à tester en conditions réelles.
 Les pages Finance lisent de nouvelles colonnes (`title`, `vendor_name`, `status`, ...) et la table
 `financial_transaction_attachments` + le bucket `churchos-finance`. **Appliquer
 [`db/migrations/2026-09-30-expense-form-fields.sql`](db/migrations/2026-09-30-expense-form-fields.sql)
-sur Supabase AVANT de déployer** (idempotent ; déjà inclus dans `db/schema.sql`). Vérifiée sur un
+sur Supabase AVANT de déployer** (idempotent ; déjà inclus dans `db/schema.sql`). Sans `finance.approve`, une dépense est toujours créée « En attente ». Vérifiée sur un
 Postgres 16 local (2 exécutions successives + requêtes de liste/KPI) ; l'upload Storage et
 l'enregistrement via Supabase n'ont pas été testés en conditions réelles.
 
@@ -105,7 +105,7 @@ Génération de rapports en **PDF, Excel, JSON ou CSV** (`GET /api/finance/repor
 gardé par `finance.view` + `reports.export`) : vue d'ensemble, état des résultats, exécution budgétaire,
 flux de trésorerie, budgets par ministère. Chaque génération est tracée dans `audit_logs`
 (`finance.report.generated`) et alimente « Rapports récents » (un clic régénère le fichier, rien n'est
-stocké). Aucune migration requise. Vérifié sur Postgres local (5 types × 4 formats, PDF relu en image) ;
+stocké). Les dépenses « en attente » sont comptées, les « rejetées » exclues. Aucune migration requise. Vérifié sur Postgres local (5 types × 4 formats, PDF relu en image) ;
 le téléchargement navigateur authentifié n'a pas été testé en conditions réelles.
 
 ### Reste à faire

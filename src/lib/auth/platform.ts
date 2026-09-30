@@ -1,26 +1,10 @@
 import "server-only";
-import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
-import { db } from "@/lib/db/client";
-import { platformAdmins } from "@/lib/db/schema";
+import { isPlatformAdmin } from "./platform-admin";
 import { getCurrentUser, requireUser, type CurrentUser } from "./session";
 
-export async function isPlatformAdmin(userId: string): Promise<boolean> {
-  try {
-    const [row] = await db
-      .select({ userId: platformAdmins.userId })
-      .from(platformAdmins)
-      .where(eq(platformAdmins.userId, userId));
-    return Boolean(row);
-  } catch (error) {
-    // Table `platform_admins` pas encore appliquée (db/schema.sql) : cette vérification tourne dans
-    // le layout de TOUTES les pages, elle ne doit jamais faire tomber l'application. Échec fermé :
-    // personne n'est administrateur de plateforme tant que la table n'existe pas.
-    console.error("isPlatformAdmin: lecture de platform_admins impossible", error);
-    return false;
-  }
-}
+export { isPlatformAdmin };
 
 /** Variante sans redirection, pour afficher/masquer un lien (ex. menu latéral). */
 export async function getPlatformAdminUser(): Promise<CurrentUser | null> {

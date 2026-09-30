@@ -2004,7 +2004,12 @@ drop policy if exists finance_storage_delete_org on storage.objects;
 create policy finance_storage_delete_org on storage.objects
 for delete using (
   bucket_id = 'churchos-finance'
-  and public.is_org_admin((storage.foldername(name))[1]::uuid)
+  and (
+    public.is_org_admin((storage.foldername(name))[1]::uuid)
+    -- Le téléverseur peut retirer SES fichiers : indispensable au nettoyage quand l'enregistrement
+    -- de la dépense échoue après l'envoi des justificatifs.
+    or owner_id = (select auth.uid())::text
+  )
 );
 
 -- =========================================================
