@@ -16,10 +16,13 @@ interface KpiCardProps {
   deltaSuffix?: string;
   extraSuffix?: string;
   periodLabel?: string;
+  /** « inverse » : une hausse est une mauvaise nouvelle (ex. dépenses) → rouge ; une baisse → vert. */
+  deltaTone?: "auto" | "inverse";
 }
 
-export function KpiCard({ icon: Icon, iconClassName, label, value, delta, deltaSuffix = "%", extraSuffix, periodLabel }: KpiCardProps) {
+export function KpiCard({ icon: Icon, iconClassName, label, value, delta, deltaSuffix = "%", extraSuffix, periodLabel, deltaTone = "auto" }: KpiCardProps) {
   const positive = (delta ?? 0) >= 0;
+  const good = deltaTone === "inverse" ? !positive : positive;
   const ArrowIcon = positive ? ArrowUp : ArrowDown;
 
   return (
@@ -34,7 +37,7 @@ export function KpiCard({ icon: Icon, iconClassName, label, value, delta, deltaS
         <p className="mt-2.5 text-2xl font-bold text-navy">{value}</p>
         {delta !== undefined && (
           <p className="mt-1 flex items-center gap-1 text-xs">
-            <span className={cn("flex items-center gap-0.5 font-medium", positive ? "text-success" : "text-danger")}>
+            <span className={cn("flex items-center gap-0.5 font-medium", good ? "text-success" : "text-danger")}>
               <ArrowIcon className="size-3" />
               {positive ? "+" : ""}
               {delta}

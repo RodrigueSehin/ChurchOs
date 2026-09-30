@@ -99,6 +99,15 @@ Le champ « Ministère / Projet » ajoute `budgets.ministry_id` :
 > Après une migration, si l'app affiche « Could not find the '…' column … in the schema cache », exécuter
 > `notify pgrst, 'reload schema';` dans le SQL Editor (les migrations ci-dessus le font déjà).
 
+### Rapports financiers (`/finance/reports`)
+
+Génération de rapports en **PDF, Excel, JSON ou CSV** (`GET /api/finance/report?type=&format=&from=&to=&category=&fund=`,
+gardé par `finance.view` + `reports.export`) : vue d'ensemble, état des résultats, exécution budgétaire,
+flux de trésorerie, budgets par ministère. Chaque génération est tracée dans `audit_logs`
+(`finance.report.generated`) et alimente « Rapports récents » (un clic régénère le fichier, rien n'est
+stocké). Aucune migration requise. Vérifié sur Postgres local (5 types × 4 formats, PDF relu en image) ;
+le téléchargement navigateur authentifié n'a pas été testé en conditions réelles.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
