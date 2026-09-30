@@ -10,6 +10,7 @@ import {
   financialTransactionAttachments,
   financialTransactions,
   funds,
+  ministries,
   people,
 } from "@/lib/db/schema";
 
@@ -501,4 +502,22 @@ export async function getRecentBudgets(organizationId: string, limit = 4) {
     .where(eq(budgets.organizationId, organizationId))
     .orderBy(desc(budgets.updatedAt))
     .limit(limit);
+}
+
+/** Ministère rattaché à chaque budget (id → nom). Lecture isolée et tolérante : si la colonne
+ * `budgets.ministry_id` n'est pas encore migrée, la liste des budgets reste affichable. */
+export async function getBudgetMinistries(budgetIds: string[]) {
+  const byBudget = new Map<string, string>();
+  if (budgetIds.length === 0) return byBudget;
+  try {
+    const rows = await db
+      .select({ id: budgets.id, ministryName: ministries.name })
+      .from(budgets)
+      .innerJoin(ministries, eq(ministries.id, budgets.ministryId))
+      .where(inArray(budgets.id, budgetIds));
+    for (const r of rows) byBudget.set(r.id, r.ministryName);
+  } catch (error) {
+    console.error("getBudgetMinistries: colonne budgets.ministry_id absente ?", error);
+  }
+  return byBudget;
 }

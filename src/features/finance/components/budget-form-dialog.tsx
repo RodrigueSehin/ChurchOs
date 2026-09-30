@@ -80,6 +80,7 @@ function RecapRow({ icon: Icon, label, children }: { icon: React.ElementType; la
 export function BudgetFormDialog({
   categories,
   funds,
+  ministries,
   campuses,
   people,
   currency,
@@ -87,6 +88,7 @@ export function BudgetFormDialog({
 }: {
   categories: Option[];
   funds: Option[];
+  ministries: Option[];
   campuses: Option[];
   people: Option[];
   currency: string;
@@ -99,6 +101,7 @@ export function BudgetFormDialog({
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [fundId, setFundId] = useState("");
+  const [ministryId, setMinistryId] = useState("");
   const [description, setDescription] = useState("");
   const [period, setPeriod] = useState("year");
   const [year, setYear] = useState(currentYear);
@@ -175,12 +178,14 @@ export function BudgetFormDialog({
                     </FormSelect>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="bud-fund">Fonds / Projet</Label>
-                    <FormSelect id="bud-fund" name="fundId" value={fundId} onChange={(e) => setFundId(e.target.value)}>
-                      <option value="">—</option>
-                      {funds.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.name}
+                    <Label htmlFor="bud-ministry">Ministère / Projet *</Label>
+                    <FormSelect id="bud-ministry" name="ministryId" value={ministryId} onChange={(e) => setMinistryId(e.target.value)} required={ministries.length > 0}>
+                      <option value="" disabled={ministries.length > 0}>
+                        {ministries.length > 0 ? "Sélectionner un ministère" : "Aucun ministère"}
+                      </option>
+                      {ministries.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
                         </option>
                       ))}
                     </FormSelect>
@@ -247,7 +252,7 @@ export function BudgetFormDialog({
 
               <section className="flex flex-col gap-4">
                 <SectionHeader step={3} title="Répartition et paramètres" subtitle="Configurez les options de suivi et d'approbation." tone="purple" />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="bud-campus">Centre de coût (optionnel)</Label>
                     <FormSelect id="bud-campus" name="campusId" value={campusId} onChange={(e) => setCampusId(e.target.value)}>
@@ -266,6 +271,17 @@ export function BudgetFormDialog({
                       {people.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
+                        </option>
+                      ))}
+                    </FormSelect>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="bud-fund">Fonds (optionnel)</Label>
+                    <FormSelect id="bud-fund" name="fundId" value={fundId} onChange={(e) => setFundId(e.target.value)}>
+                      <option value="">—</option>
+                      {funds.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
                         </option>
                       ))}
                     </FormSelect>
@@ -319,8 +335,8 @@ export function BudgetFormDialog({
                 <RecapRow icon={Tag} label="Catégorie">
                   {categories.find((c) => c.id === categoryId)?.name ?? "—"}
                 </RecapRow>
-                <RecapRow icon={FolderOpen} label="Fonds / Projet">
-                  {funds.find((f) => f.id === fundId)?.name ?? "—"}
+                <RecapRow icon={FolderOpen} label="Ministère / Projet">
+                  {ministries.find((m) => m.id === ministryId)?.name ?? "—"}
                 </RecapRow>
                 <RecapRow icon={CalendarDays} label="Période">
                   {periodLabel} {year}

@@ -103,6 +103,7 @@ export const budgetSchema = z.object({
   notes: optionalString,
   managerPersonId: optionalString,
   campusId: optionalString,
+  ministryId: optionalString,
   status: z.enum(["draft", "active"]).nullish().transform((v) => v ?? "draft"),
 });
 export type BudgetInput = z.infer<typeof budgetSchema>;

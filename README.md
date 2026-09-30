@@ -92,6 +92,9 @@ l'enregistrement via Supabase n'ont pas été testés en conditions réelles.
 Le formulaire « Nouveau budget » ajoute aussi 4 colonnes à `budgets` :
 [`db/migrations/2026-09-30-budget-form-fields.sql`](db/migrations/2026-09-30-budget-form-fields.sql)
 (idempotent, inclus dans `db/schema.sql`) — le code ne les envoie que si elles sont renseignées.
+Le champ « Ministère / Projet » ajoute `budgets.ministry_id` :
+[`db/migrations/2026-09-30-budget-ministry.sql`](db/migrations/2026-09-30-budget-ministry.sql)
+(à appliquer aussi ; sans elle, créer un budget avec un ministère échoue).
 
 ### Reste à faire
 

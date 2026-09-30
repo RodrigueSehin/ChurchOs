@@ -10,6 +10,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getBudgetByCategory,
+  getBudgetMinistries,
   getBudgetKpis,
   getBudgetLinesByBudget,
   getBudgetTabCounts,
@@ -21,6 +22,7 @@ import {
 } from "@/features/finance/queries";
 import { formatMoney } from "@/features/finance/format";
 import { getPeopleForSelect } from "@/features/members/services";
+import { getMinistriesForSelect } from "@/features/ministries/services";
 import { getCampuses } from "@/features/organizations/queries";
 import { BudgetFormDialog } from "@/features/finance/components/budget-form-dialog";
 import { BudgetsTable } from "@/features/finance/components/budgets-table";
@@ -105,7 +107,7 @@ export default async function BudgetsPage({
   const requestedYear = Number(params.year);
   const year = years.includes(requestedYear) ? requestedYear : years.includes(currentYear) || years.length === 0 ? currentYear : years[0]!;
 
-  const [kpis, byCategory, categories, funds, tabCounts, recent, { rows, total, pageSize }, campuses, people] = await Promise.all([
+  const [kpis, byCategory, categories, funds, tabCounts, recent, { rows, total, pageSize }, campuses, people, ministries] = await Promise.all([
     getBudgetKpis(organizationId, year),
     getBudgetByCategory(organizationId, year),
     getFinanceCategories(organizationId),
@@ -115,15 +117,19 @@ export default async function BudgetsPage({
     getBudgetsOverview({ organizationId, year, status: params.status, search: params.q, page }),
     getCampuses(organizationId),
     canManage ? getPeopleForSelect(organizationId) : Promise.resolve([]),
+    getMinistriesForSelect(organizationId),
   ]);
   // Budgets = dépenses prévues : catégories de dépense principales (toutes, si aucune n'existe encore).
   const expenseCategories = categories.filter((c) => c.type === "expense" && !c.parentId);
   const budgetCategories = expenseCategories.length > 0 ? expenseCategories : categories.filter((c) => !c.parentId);
-  const linesByBudget = await getBudgetLinesByBudget(rows.map((r) => r.id));
+  const [linesByBudget, ministryByBudget] = await Promise.all([
+    getBudgetLinesByBudget(rows.map((r) => r.id)),
+    getBudgetMinistries(rows.map((r) => r.id)),
+  ]);
 
   const hasFilters = Boolean(params.q || params.status);
   const newBudget = canManage ? (
-    <BudgetFormDialog categories={budgetCategories} funds={funds} campuses={campuses} people={people} currency={currency} canApprove={canApprove} />
+    <BudgetFormDialog categories={budgetCategories} funds={funds} ministries={ministries} campuses={campuses} people={people} currency={currency} canApprove={canApprove} />
   ) : undefined;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
@@ -198,7 +204,7 @@ export default async function BudgetsPage({
               )
             ) : (
               <>
-                <BudgetsTable rows={rows} linesByBudget={linesByBudget} categories={categories} funds={funds} canManage={canManage} canApprove={canApprove} />
+                <BudgetsTable rows={rows} linesByBudget={linesByBudget} ministryByBudget={ministryByBudget} categories={categories} funds={funds} canManage={canManage} canApprove={canApprove} />
                 <Pagination
                   page={page}
                   pageSize={pageSize}

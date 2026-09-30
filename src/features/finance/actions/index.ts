@@ -346,6 +346,7 @@ export async function createBudget(_prev: FinanceActionState, formData: FormData
     notes: formData.get("notes"),
     managerPersonId: formData.get("managerPersonId"),
     campusId: formData.get("campusId"),
+    ministryId: formData.get("ministryId"),
     status: formData.get("status"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
@@ -370,6 +371,7 @@ export async function createBudget(_prev: FinanceActionState, formData: FormData
     ["notes", v.notes],
     ["manager_person_id", v.managerPersonId],
     ["campus_id", v.campusId],
+    ["ministry_id", v.ministryId],
   ];
   for (const [column, value] of optional) if (value.trim() !== "") extra[column] = value.trim();
 

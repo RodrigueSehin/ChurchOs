@@ -20,6 +20,7 @@ function n(value: number) {
 export function BudgetsTable({
   rows,
   linesByBudget,
+  ministryByBudget,
   categories,
   funds,
   canManage,
@@ -27,6 +28,7 @@ export function BudgetsTable({
 }: {
   rows: Row[];
   linesByBudget: LinesByBudget;
+  ministryByBudget: Map<string, string>;
   categories: { id: string; name: string }[];
   funds: { id: string; name: string }[];
   canManage: boolean;
@@ -57,7 +59,10 @@ export function BudgetsTable({
             const names = Array.from(new Set(lines.map((l) => l.categoryName).filter((c): c is string => Boolean(c))));
             return (
               <tr key={row.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                <td className="px-4 py-3 font-medium text-navy">{row.name}</td>
+                <td className="px-4 py-3 font-medium text-navy">
+                  {row.name}
+                  {ministryByBudget.get(row.id) && <span className="block text-xs font-normal text-slate-400">{ministryByBudget.get(row.id)}</span>}
+                </td>
                 <td className="px-3 py-3">
                   {names.length === 0 ? (
                     <span className="text-slate-400">—</span>
