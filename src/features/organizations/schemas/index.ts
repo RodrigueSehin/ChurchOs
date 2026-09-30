@@ -23,7 +23,6 @@ export const updateOrganizationSchema = z.object({
   email: optionalEmail(),
   phone: optionalString(),
   website: optionalUrl(),
-  logoUrl: optionalUrl(),
   addressLine1: optionalString(),
   city: optionalString(),
   region: optionalString(),

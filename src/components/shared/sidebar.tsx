@@ -3,19 +3,35 @@ import Link from "next/link";
 import { Church, Settings, ShieldCheck } from "lucide-react";
 
 import logo from "@/img/logo_churchos_dark.png";
+import { ChurchLogo } from "@/components/shared/church-logo";
 import { NavList } from "@/components/shared/nav-list";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-export function Sidebar({ isPlatformAdmin = false }: { isPlatformAdmin?: boolean }) {
+export function Sidebar({
+  isPlatformAdmin = false,
+  organizationName,
+  organizationLogoUrl,
+}: {
+  isPlatformAdmin?: boolean;
+  organizationName?: string;
+  /** Logo de l'église : s'il existe, il remplace celui de ChurchOS dans le menu. */
+  organizationLogoUrl?: string | null;
+}) {
   return (
     <TooltipProvider delayDuration={100}>
       <aside className="hidden shrink-0 flex-col bg-navy md:flex md:w-16 lg:w-64">
         <Link href="/dashboard" className="flex shrink-0 items-center justify-center border-b border-white/10 px-4 py-4 lg:justify-start lg:px-5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-gold lg:hidden">
-            <Church className="size-4" />
-          </span>
-          <Image src={logo} alt="ChurchOS" priority className="hidden h-auto w-44 lg:block" />
+          {organizationLogoUrl ? (
+            <ChurchLogo url={organizationLogoUrl} name={organizationName ?? "de l'église"} className="p-1 lg:p-1.5" imgClassName="max-h-8 max-w-[2rem] lg:max-h-10 lg:max-w-[11rem]" />
+          ) : (
+            <>
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-gold lg:hidden">
+                <Church className="size-4" />
+              </span>
+              <Image src={logo} alt="ChurchOS" priority className="hidden h-auto w-44 lg:block" />
+            </>
+          )}
         </Link>
 
         <ScrollArea className="flex-1">

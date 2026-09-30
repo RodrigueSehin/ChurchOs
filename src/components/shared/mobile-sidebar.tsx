@@ -6,11 +6,12 @@ import Link from "next/link";
 import { Menu, Settings } from "lucide-react";
 
 import logo from "@/img/logo_churchos_dark.png";
+import { ChurchLogo } from "@/components/shared/church-logo";
 import { NavList } from "@/components/shared/nav-list";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
-export function MobileSidebar() {
+export function MobileSidebar({ organizationName, organizationLogoUrl }: { organizationName?: string; organizationLogoUrl?: string | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -22,8 +23,12 @@ export function MobileSidebar() {
       </SheetTrigger>
       <SheetContent side="left" className="flex flex-col bg-navy p-0">
         <div className="flex shrink-0 items-center border-b border-white/10 px-5 py-4">
-          <SheetTitle className="sr-only">ChurchOS</SheetTitle>
-          <Image src={logo} alt="ChurchOS" priority className="h-auto w-40" />
+          <SheetTitle className="sr-only">{organizationLogoUrl ? (organizationName ?? "Église") : "ChurchOS"}</SheetTitle>
+          {organizationLogoUrl ? (
+            <ChurchLogo url={organizationLogoUrl} name={organizationName ?? "de l'église"} />
+          ) : (
+            <Image src={logo} alt="ChurchOS" priority className="h-auto w-40" />
+          )}
         </div>
         <div className="flex-1 overflow-y-auto">
           <NavList onNavigate={() => setOpen(false)} />
