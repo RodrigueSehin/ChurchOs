@@ -128,3 +128,20 @@ n'importe quel autre gate), pas une probabilité de filtrage post-hoc sur des ch
 retrouvés par similarité vectorielle. Le pipeline RAG sur `ai_documents` décrit ci-dessus reste
 valide comme design pour une future fonctionnalité (questions sur le contenu de documents
 uploadés), mais n'a pas été construit en Phase 15 — voir `07-sprint-plan.md#phase-15`.
+
+
+## Administration globale de la plateforme
+
+`SUPER_ADMIN` est un rôle de *membership* : il ne donne aucune portée inter-organisations
+(`is_org_admin(p_org_id)` est évalué par organisation). La vue `/platform` repose donc sur une
+table dédiée `public.platform_admins` (RLS activée sans politique : inaccessible via PostgREST,
+lue uniquement côté serveur par Drizzle).
+
+- Garde : `requirePlatformAdmin()` (`src/lib/auth/platform.ts`) — premier appel de chaque page
+  `/platform/*` et de chaque Server Action `features/platform`. Un non-admin reçoit un 404.
+- Les lectures inter-organisations ne portent que sur des compteurs et métadonnées (aucune donnée
+  pastorale/financière de l'église).
+- Toute action transversale est écrite dans `audit_logs` (ex. `platform.organization.suspended`).
+- Une église `suspended` est bloquée dans `requireOrganization()` (redirection `/suspended`), donc
+  pages et Server Actions ; les administrateurs de plateforme en sont exemptés.
+- Octroi/retrait : `npm run db:grant-platform-admin -- email [--revoke]`.

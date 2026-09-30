@@ -71,6 +71,15 @@ Terminée : tableau de bord, menu latéral, Membres, Familles, Visiteurs, Groupe
 Sujets de prière, Visites, Conseil pastoral, Ministères, Ouvriers, Services, Calendrier, Plannings,
 Événements, Inscriptions, Présences, et la page Vitrine (site marketing public).
 
+### Administration globale ChurchOS (`/platform`)
+
+Vue réservée aux administrateurs de la plateforme (table `platform_admins`, distincte du rôle
+`SUPER_ADMIN` qui reste limité à une organisation) : indicateurs globaux, liste/recherche des
+églises, détail (usage, abonnement), catalogue des plans, journal des actions et suspension/réactivation (tracée dans `audit_logs`, bloque
+l'accès de l'église via `/suspended`). Accès : appliquer la nouvelle table de `db/schema.sql`, puis
+`npm run db:grant-platform-admin -- email@exemple.com`. Écrite et vérifiée par typecheck/lint
+uniquement — à tester en conditions réelles.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.

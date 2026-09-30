@@ -25,8 +25,11 @@ export function TransactionFormDialog({
   funds,
   accounts,
   people,
+  triggerLabel,
 }: {
   type: "income" | "expense";
+  /** Libellé du bouton d'ouverture (défaut : « Nouvelle recette/dépense »). */
+  triggerLabel?: string;
   categories: { id: string; name: string }[];
   funds: { id: string; name: string }[];
   accounts: { id: string; name: string }[];
@@ -48,7 +51,7 @@ export function TransactionFormDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <Button type="button" onClick={() => setOpen(true)}>
         <Plus className="size-4" />
-        Nouvelle {label}
+        {triggerLabel ?? `Nouvelle ${label}`}
       </Button>
       <DialogContent>
         <DialogHeader>

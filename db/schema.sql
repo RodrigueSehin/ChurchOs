@@ -1893,5 +1893,20 @@ for delete using (
 );
 
 -- =========================================================
+-- Administration globale ChurchOS (vue /platform)
+-- =========================================================
+-- Marqueur de plateforme, distinct du rôle `SUPER_ADMIN` (qui est porté par un membership, donc
+-- limité à UNE organisation — voir is_org_admin()). RLS activée SANS politique : ni le rôle
+-- `anon` ni `authenticated` (PostgREST) ne peuvent lire/écrire cette table ; seul l'accès serveur
+-- (Drizzle via DATABASE_URL, qui contourne RLS) la consulte, derrière `requirePlatformAdmin()`.
+-- Ajout : `npm run db:grant-platform-admin -- email@exemple.com`.
+create table if not exists public.platform_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id) on delete set null
+);
+alter table public.platform_admins enable row level security;
+
+-- =========================================================
 -- END
 -- =========================================================

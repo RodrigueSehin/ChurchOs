@@ -2,6 +2,7 @@ import { Breadcrumb } from "@/components/shared/breadcrumb";
 import { Footer } from "@/components/shared/footer";
 import { Sidebar } from "@/components/shared/sidebar";
 import { Topbar } from "@/components/shared/topbar";
+import { isPlatformAdmin } from "@/lib/auth/platform";
 import { requireOrganization, requireUser } from "@/lib/auth/session";
 
 function initialsOf(name: string) {
@@ -15,6 +16,7 @@ function initialsOf(name: string) {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const current = await requireOrganization(user.id);
+  const platformAdmin = await isPlatformAdmin(user.id);
 
   const displayName =
     user.profile?.displayName ??
@@ -23,7 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-dvh overflow-hidden">
-      <Sidebar />
+      <Sidebar isPlatformAdmin={platformAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           organizationName={current.organization.name}

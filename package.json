@@ -13,6 +13,7 @@
     "db:verify-finance-rls": "tsx db/scripts/verify-finance-rls.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed/index.ts",
+    "db:grant-platform-admin": "tsx db/scripts/grant-platform-admin.ts",
     "db:seed-plan-features": "tsx db/scripts/seed-plan-features.ts",
     "db:setup-stripe-billing": "tsx db/scripts/setup-stripe-billing.ts",
     "db:local": "tsx db/local-postgres/index.ts"
