@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import {
+  ATTACHMENT_ALLOWED_MIME_TYPES,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_MAX_FILES,
   budgetLineSchema,
   budgetSchema,
   financeCategorySchema,
@@ -12,6 +15,8 @@ import {
   fundSchema,
   transactionSchema,
 } from "@/features/finance/schemas";
+
+const FINANCE_BUCKET = "churchos-finance";
 
 export interface FinanceActionState {
   error?: string;
@@ -26,7 +31,11 @@ export async function createFinanceCategory(_prev: FinanceActionState, formData:
   const check = await checkPermission("finance.create");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de créer une catégorie financière." };
 
-  const parsed = financeCategorySchema.safeParse({ name: formData.get("name"), type: formData.get("type") });
+  const parsed = financeCategorySchema.safeParse({
+    name: formData.get("name"),
+    type: formData.get("type"),
+    parentId: formData.get("parentId"),
+  });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
 
@@ -35,6 +44,7 @@ export async function createFinanceCategory(_prev: FinanceActionState, formData:
     organization_id: check.organization.organization.id,
     name: v.name,
     type: v.type,
+    parent_id: orNull(v.parentId),
   });
   if (error) {
     if (error.message.includes("duplicate") || error.message.includes("unique")) {
@@ -123,7 +133,18 @@ function parseTransactionForm(formData: FormData) {
     categoryId: formData.get("categoryId"),
     fundId: formData.get("fundId"),
     donorPersonId: formData.get("donorPersonId"),
+    title: formData.get("title"),
+    notes: formData.get("notes"),
+    vendorName: formData.get("vendorName"),
+    invoiceDate: formData.get("invoiceDate"),
+    subcategoryId: formData.get("subcategoryId"),
+    campusId: formData.get("campusId"),
+    status: formData.get("status"),
   });
+}
+
+function sanitizeFilename(name: string) {
+  return name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
 }
 
 export async function createTransaction(_prev: FinanceActionState, formData: FormData): Promise<FinanceActionState> {
@@ -136,9 +157,52 @@ export async function createTransaction(_prev: FinanceActionState, formData: For
   const amount = Number(v.amount);
   if (!Number.isFinite(amount) || amount <= 0) return { error: "Le montant doit être un nombre positif." };
 
+  const files = formData
+    .getAll("attachments")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length > ATTACHMENT_MAX_FILES) return { error: `${ATTACHMENT_MAX_FILES} fichiers maximum.` };
+  for (const file of files) {
+    if (!ATTACHMENT_ALLOWED_MIME_TYPES.includes(file.type)) {
+      return { error: `« ${file.name} » : format non accepté (PDF, JPG ou PNG uniquement).` };
+    }
+    if (file.size > ATTACHMENT_MAX_BYTES) return { error: `« ${file.name} » dépasse 10 Mo.` };
+  }
+
+  const organizationId = check.organization.organization.id;
+  // Identifiant généré ici pour pouvoir ranger les fichiers sous `<org>/<transaction>/...` AVANT
+  // l'insertion, puis retirer ces fichiers si l'insertion échoue (pas d'orphelins Storage).
+  const transactionId = crypto.randomUUID();
   const supabase = await createClient();
+
+  const uploaded: { path: string; file: File }[] = [];
+  for (const file of files) {
+    const path = `${organizationId}/${transactionId}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
+    const { error: uploadError } = await supabase.storage.from(FINANCE_BUCKET).upload(path, file, { contentType: file.type });
+    if (uploadError) {
+      if (uploaded.length > 0) await supabase.storage.from(FINANCE_BUCKET).remove(uploaded.map((u) => u.path));
+      return { error: `Échec du téléversement de « ${file.name} » : ${uploadError.message}` };
+    }
+    uploaded.push({ path, file });
+  }
+
+  // Les colonnes ajoutées par db/migrations/2026-09-30-expense-form-fields.sql ne sont envoyées que
+  // si elles sont renseignées : les autres formulaires (ex. dons) continuent de fonctionner tant
+  // que la migration n'est pas appliquée.
+  const extra: Record<string, string | null> = {};
+  const optional: [string, string][] = [
+    ["title", v.title],
+    ["notes", v.notes],
+    ["vendor_name", v.vendorName],
+    ["invoice_date", v.invoiceDate],
+    ["subcategory_id", v.subcategoryId],
+    ["campus_id", v.campusId],
+  ];
+  for (const [column, value] of optional) if (value.trim() !== "") extra[column] = value.trim();
+  if (v.status !== "validated") extra.status = v.status;
+
   const { error } = await supabase.from("financial_transactions").insert({
-    organization_id: check.organization.organization.id,
+    id: transactionId,
+    organization_id: organizationId,
     type: v.type,
     amount,
     transaction_date: v.transactionDate,
@@ -150,11 +214,82 @@ export async function createTransaction(_prev: FinanceActionState, formData: For
     fund_id: orNull(v.fundId),
     donor_person_id: orNull(v.donorPersonId),
     created_by: check.user.id,
+    ...extra,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    if (uploaded.length > 0) await supabase.storage.from(FINANCE_BUCKET).remove(uploaded.map((u) => u.path));
+    return { error: error.message };
+  }
+
+  if (uploaded.length > 0) {
+    const { error: attachError } = await supabase.from("financial_transaction_attachments").insert(
+      uploaded.map(({ path, file }) => ({
+        organization_id: organizationId,
+        transaction_id: transactionId,
+        file_name: file.name,
+        storage_path: path,
+        mime_type: file.type,
+        size_bytes: file.size,
+        created_by: check.user.id,
+      })),
+    );
+    if (attachError) {
+      // La dépense est enregistrée ; seules les pièces jointes ont échoué — on le dit clairement.
+      await supabase.storage.from(FINANCE_BUCKET).remove(uploaded.map((u) => u.path));
+      revalidatePath(v.type === "income" ? "/finance/income" : "/finance/expenses");
+      return { error: `Dépense enregistrée, mais pièces jointes non conservées : ${attachError.message}` };
+    }
+  }
 
   revalidatePath(v.type === "income" ? "/finance/income" : "/finance/expenses");
   return { success: true };
+}
+
+/** Valide / met en attente / rejette une dépense. Réservé à `finance.approve` (ou admin). */
+export async function updateTransactionStatus(transactionId: string, status: string): Promise<FinanceActionState> {
+  const check = await checkPermission("finance.approve");
+  if (!check.allowed && !check.context.isAdmin) return { error: "Vous n'avez pas la permission d'approuver une opération." };
+  if (!["validated", "pending", "rejected"].includes(status)) return { error: "Statut invalide." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("financial_transactions")
+    .update({ status })
+    .eq("id", transactionId)
+    .eq("organization_id", check.organization.organization.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/finance/expenses");
+  return { success: true };
+}
+
+export interface AttachmentLink {
+  id: string;
+  fileName: string;
+  sizeBytes: number | null;
+  url: string;
+}
+
+/** Liens de téléchargement temporaires (60 s) des justificatifs d'une opération. */
+export async function getAttachmentLinks(transactionId: string): Promise<{ error?: string; links?: AttachmentLink[] }> {
+  const check = await checkPermission("finance.view");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de consulter les finances." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("financial_transaction_attachments")
+    .select("id, file_name, storage_path, size_bytes")
+    .eq("transaction_id", transactionId)
+    .eq("organization_id", check.organization.organization.id)
+    .order("created_at");
+  if (error) return { error: error.message };
+
+  const links: AttachmentLink[] = [];
+  for (const row of data ?? []) {
+    const { data: signed } = await supabase.storage.from(FINANCE_BUCKET).createSignedUrl(row.storage_path, 60);
+    if (signed?.signedUrl) links.push({ id: row.id, fileName: row.file_name, sizeBytes: row.size_bytes, url: signed.signedUrl });
+  }
+  return { links };
 }
 
 /** Réservé aux admins (policy RLS de suppression : `is_org_admin()`). */
@@ -165,12 +300,26 @@ export async function deleteTransaction(transactionId: string, type: string): Pr
   }
 
   const supabase = await createClient();
+  const organizationId = check.organization.organization.id;
+
+  // Chemins des justificatifs à retirer de Storage une fois la ligne supprimée (les lignes
+  // `financial_transaction_attachments` partent en cascade, pas les fichiers).
+  const { data: attachments } = await supabase
+    .from("financial_transaction_attachments")
+    .select("storage_path")
+    .eq("transaction_id", transactionId)
+    .eq("organization_id", organizationId);
+
   const { error } = await supabase
     .from("financial_transactions")
     .delete()
     .eq("id", transactionId)
-    .eq("organization_id", check.organization.organization.id);
+    .eq("organization_id", organizationId);
   if (error) return { error: error.message };
+
+  if (attachments && attachments.length > 0) {
+    await supabase.storage.from(FINANCE_BUCKET).remove(attachments.map((a) => a.storage_path));
+  }
 
   revalidatePath(type === "income" ? "/finance/income" : "/finance/expenses");
   return { success: true };

@@ -3,8 +3,9 @@ import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { organizationMemberships, organizations, platformAdmins, profiles } from "@/lib/db/schema";
+import { organizationMemberships, organizations, profiles } from "@/lib/db/schema";
 import { createClient } from "@/lib/supabase/server";
+import { isPlatformAdmin } from "./platform";
 
 export interface CurrentUser {
   id: string;
@@ -66,10 +67,7 @@ export async function requireOrganization(userId: string) {
   // Église suspendue depuis `/platform` : accès bloqué pour pages ET Server Actions (toutes
   // passent par ici). Les administrateurs de la plateforme restent exemptés.
   if (current.organization.status === "suspended") {
-    const [admin] = await db
-      .select({ userId: platformAdmins.userId })
-      .from(platformAdmins)
-      .where(eq(platformAdmins.userId, userId));
+    const admin = await isPlatformAdmin(userId);
     if (!admin) redirect("/suspended");
   }
   return current;

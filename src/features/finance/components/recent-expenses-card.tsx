@@ -4,6 +4,7 @@ import { ArrowRight, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { pastelStyleFor } from "@/lib/color-hash";
+import { TransactionStatusBadge } from "@/features/finance/components/transaction-status-badge";
 import { formatMoney } from "@/features/finance/format";
 import type { getRecentTransactions } from "@/features/finance/queries";
 
@@ -35,10 +36,13 @@ export function RecentExpensesCard({ rows }: { rows: Row[] }) {
                   <Receipt className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-navy">{r.description ?? r.categoryName ?? "Dépense"}</p>
+                  <p className="truncate text-sm font-medium text-navy">{r.title ?? r.description ?? r.categoryName ?? "Dépense"}</p>
                   <p className="text-xs text-slate-400">{formatDate(r.transactionDate)}</p>
                 </div>
-                <span className="shrink-0 text-sm font-semibold text-navy">{formatMoney(r.amount, r.currency)}</span>
+                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                  <span className="text-sm font-semibold text-navy">{formatMoney(r.amount, r.currency)}</span>
+                  <TransactionStatusBadge status={r.status} />
+                </div>
               </div>
             );
           })

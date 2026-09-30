@@ -18,6 +18,16 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   other: "Autre",
 };
 
+export const TRANSACTION_STATUS_LABELS: Record<string, string> = {
+  validated: "Validée",
+  pending: "En attente",
+  rejected: "Rejetée",
+};
+
+export const ATTACHMENT_ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+export const ATTACHMENT_MAX_FILES = 5;
+
 export const BUDGET_STATUS_LABELS: Record<string, string> = {
   draft: "Brouillon",
   active: "Actif",
@@ -34,6 +44,7 @@ export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
 export const financeCategorySchema = z.object({
   name: z.string().min(1, "Nom requis"),
   type: z.enum(["income", "expense", "transfer"]).default("income"),
+  parentId: optionalString,
 });
 
 export const fundSchema = z.object({
@@ -67,6 +78,14 @@ export const transactionSchema = z.object({
   categoryId: optionalString,
   fundId: optionalString,
   donorPersonId: optionalString,
+  // Formulaire « Nouvelle dépense » (absents des autres formulaires → chaîne vide / "validated").
+  title: optionalString,
+  notes: optionalString,
+  vendorName: optionalString,
+  invoiceDate: optionalString,
+  subcategoryId: optionalString,
+  campusId: optionalString,
+  status: z.enum(["validated", "pending", "rejected"]).nullish().transform((v) => v ?? "validated"),
 });
 export type TransactionInput = z.infer<typeof transactionSchema>;
 
