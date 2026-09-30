@@ -14,3 +14,4 @@ export * from "./communication";
 export * from "./documents";
 export * from "./ai";
 export * from "./audit";
+export * from "./platform";

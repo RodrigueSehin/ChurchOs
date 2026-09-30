@@ -1,13 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Church, Settings } from "lucide-react";
+import { Church, Settings, ShieldCheck } from "lucide-react";
 
 import logo from "@/img/logo_churchos_dark.png";
 import { NavList } from "@/components/shared/nav-list";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-export function Sidebar() {
+export function Sidebar({ isPlatformAdmin = false }: { isPlatformAdmin?: boolean }) {
   return (
     <TooltipProvider delayDuration={100}>
       <aside className="hidden shrink-0 flex-col bg-navy md:flex md:w-16 lg:w-64">
@@ -27,7 +27,21 @@ export function Sidebar() {
           </div>
         </ScrollArea>
 
-        <div className="border-t border-white/10 p-3">
+        <div className="flex flex-col gap-1 border-t border-white/10 p-3">
+          {isPlatformAdmin && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href="/platform"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gold hover:bg-white/10 lg:px-3"
+                >
+                  <ShieldCheck className="size-4 shrink-0" />
+                  <span className="hidden truncate lg:inline">Administration</span>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">Administration ChurchOS</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Link
