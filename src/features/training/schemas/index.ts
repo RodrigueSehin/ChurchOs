@@ -95,15 +95,55 @@ export const enrollPersonSchema = z.object({
 });
 export type EnrollPersonInput = z.infer<typeof enrollPersonSchema>;
 
-export const certificationSchema = z.object({
-  personId: z.string().min(1, "Personne requise"),
-  courseId: optionalString,
-  name: z.string().min(1, "Nom du certificat requis"),
-  certificateNumber: optionalString,
-  issuedAt: optionalString,
-  expiresAt: optionalString,
-  credentialUrl: optionalString,
-});
+export const CERTIFICATION_STATUS_LABELS: Record<string, string> = {
+  obtained: "Obtenue",
+  pending: "En cours",
+  expired: "Expirée",
+};
+
+export const CERTIFICATION_VISIBILITY_LABELS: Record<string, string> = {
+  managers: "Visible par les responsables",
+  member: "Visible par le membre et les responsables",
+  organization: "Visible par toute l'église",
+};
+
+export const CERTIFICATE_BUCKET = "churchos-certificates";
+export const CERTIFICATE_MAX_BYTES = 5 * 1024 * 1024;
+export const CERTIFICATE_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+
+export const certificationSchema = z
+  .object({
+    personId: z.string().min(1, "Membre requis"),
+    courseId: optionalString,
+    name: z.string().trim().min(1, "Titre requis").max(150, "Titre : 150 caractères maximum"),
+    issuer: optionalString,
+    description: optionalString.pipe(z.string().max(500, "Description : 500 caractères maximum")),
+    certificateNumber: optionalString,
+    issuedAt: optionalString,
+    expiresAt: optionalString,
+    instructorPersonId: optionalString,
+    status: z
+      .enum(["obtained", "pending", "expired"])
+      .nullish()
+      .transform((v) => v ?? "obtained"),
+    visibility: z
+      .enum(["managers", "member", "organization"])
+      .nullish()
+      .transform((v) => v ?? "managers"),
+    notifyMember: z
+      .string()
+      .nullish()
+      .transform((v) => v === "on"),
+    credentialUrl: optionalString,
+  })
+  .refine((v) => v.status === "pending" || v.issuedAt !== "", {
+    message: "Date d'obtention requise",
+    path: ["issuedAt"],
+  })
+  .refine((v) => v.expiresAt === "" || v.issuedAt === "" || v.expiresAt >= v.issuedAt, {
+    message: "La date d'expiration doit suivre la date d'obtention",
+    path: ["expiresAt"],
+  });
 export type CertificationInput = z.infer<typeof certificationSchema>;
 
 export const courseCategorySchema = z.object({

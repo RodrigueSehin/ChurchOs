@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { getPersonIdForUser } from "@/features/training/queries";
 import {
+  CERTIFICATE_BUCKET,
   certificationSchema,
   courseModuleSchema,
   courseCategorySchema,
@@ -399,6 +400,10 @@ export async function removeEnrollment(courseId: string, enrollmentId: string): 
   return { success: true };
 }
 
+/** Enregistre une certification. Le fichier éventuel a déjà été envoyé DIRECTEMENT du navigateur vers
+ * Storage (la limite de corps de requête de Vercel, ~4,5 Mo, est inférieure aux 5 Mo autorisés) ;
+ * `filePath` ne référence que ce fichier — son préfixe est revérifié ici, et l'objet est retiré si
+ * l'enregistrement échoue. */
 export async function issueCertification(
   courseId: string | null,
   _prev: TrainingActionState,
@@ -407,39 +412,108 @@ export async function issueCertification(
   const check = await checkPermission("training.certify");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de délivrer une certification." };
 
+  const organizationId = check.organization.organization.id;
+  const supabase = await createClient();
+  const filePath = orNull(String(formData.get("filePath") ?? ""));
+  const discard = async () => {
+    if (filePath) await supabase.storage.from(CERTIFICATE_BUCKET).remove([filePath]);
+  };
+
+  if (filePath && (!filePath.startsWith(`${organizationId}/`) || filePath.includes(".."))) {
+    return { error: "Chemin de fichier invalide." };
+  }
+
   const parsed = certificationSchema.safeParse({
     personId: formData.get("personId"),
     courseId: formData.get("courseId") || (courseId ?? ""),
     name: formData.get("name"),
+    issuer: formData.get("issuer"),
+    description: formData.get("description"),
     certificateNumber: formData.get("certificateNumber"),
     issuedAt: formData.get("issuedAt"),
     expiresAt: formData.get("expiresAt"),
+    instructorPersonId: formData.get("instructorPersonId"),
+    status: formData.get("status"),
+    visibility: formData.get("visibility"),
+    notifyMember: formData.get("notifyMember"),
     credentialUrl: formData.get("credentialUrl"),
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
+  if (!parsed.success) {
+    await discard();
+    return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
+  }
   const v = parsed.data;
 
-  const supabase = await createClient();
   const { error } = await supabase.from("certifications").insert({
-    organization_id: check.organization.organization.id,
+    organization_id: organizationId,
     course_id: orNull(v.courseId),
     person_id: v.personId,
     name: v.name,
+    issuer: orNull(v.issuer),
+    description: orNull(v.description),
     certificate_number: orNull(v.certificateNumber),
     issued_at: orNull(v.issuedAt),
     expires_at: orNull(v.expiresAt),
+    instructor_person_id: orNull(v.instructorPersonId),
+    status: v.status,
+    visibility: v.visibility,
+    file_path: filePath,
     credential_url: orNull(v.credentialUrl),
   });
   if (error) {
+    await discard();
     if (error.message.includes("duplicate") || error.message.includes("unique")) {
       return { error: "Un certificat avec ce numéro existe déjà." };
     }
     return { error: error.message };
   }
 
+  if (v.notifyMember) {
+    // Notification in-app adressée à la personne ; un échec ici ne doit pas annuler la certification.
+    const { error: notifyError } = await supabase.from("notifications").insert({
+      organization_id: organizationId,
+      person_id: v.personId,
+      channel: "in_app",
+      title: "Nouvelle certification",
+      body: `Vous avez reçu la certification « ${v.name} ».`,
+      status: "sent",
+      sent_at: new Date().toISOString(),
+      data: { type: "certification" },
+    });
+    if (notifyError) console.error("training: notification de certification impossible", notifyError.message);
+  }
+
   if (courseId) revalidatePath(`/training/${courseId}`);
   revalidatePath("/training");
+  revalidatePath("/training/certifications");
   return { success: true };
+}
+
+/** URL signée (5 min) du fichier d'une certification : la visibilité est revérifiée ici, en plus de
+ * la policy RLS du bucket. */
+export async function getCertificateDownloadUrl(certificationId: string): Promise<{ url?: string; error?: string }> {
+  const check = await checkPermission("training.view");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de voir ce fichier." };
+
+  const organizationId = check.organization.organization.id;
+  const supabase = await createClient();
+  const { data: cert } = await supabase
+    .from("certifications")
+    .select("file_path, person_id, visibility")
+    .eq("id", certificationId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (!cert?.file_path) return { error: "Aucun fichier pour cette certification." };
+
+  const canSeeAll = check.context.isAdmin || check.context.permissions.has("training.certify") || check.context.permissions.has("training.manage");
+  if (!canSeeAll && cert.visibility !== "organization") {
+    const personId = await getPersonIdForUser(organizationId, check.user.email);
+    if (!(cert.visibility === "member" && personId === cert.person_id)) return { error: "Ce fichier n'est pas visible pour vous." };
+  }
+
+  const { data, error } = await supabase.storage.from(CERTIFICATE_BUCKET).createSignedUrl(cert.file_path, 300);
+  if (error || !data) return { error: error?.message ?? "Échec de la génération du lien." };
+  return { url: data.signedUrl };
 }
 
 /** Réservé aux admins — même contrainte que la suppression d'un cours. */
@@ -450,15 +524,23 @@ export async function deleteCertification(courseId: string | null, certification
   }
 
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("certifications")
+    .select("file_path")
+    .eq("id", certificationId)
+    .eq("organization_id", check.organization.organization.id)
+    .single();
   const { error } = await supabase
     .from("certifications")
     .delete()
     .eq("id", certificationId)
     .eq("organization_id", check.organization.organization.id);
   if (error) return { error: error.message };
+  if (existing?.file_path) await supabase.storage.from(CERTIFICATE_BUCKET).remove([existing.file_path]);
 
   if (courseId) revalidatePath(`/training/${courseId}`);
   revalidatePath("/training");
+  revalidatePath("/training/certifications");
   return { success: true };
 }
 

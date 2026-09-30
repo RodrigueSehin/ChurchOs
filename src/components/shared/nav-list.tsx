@@ -15,6 +15,10 @@ interface NavListProps {
 
 export function NavList({ iconOnly = false, onNavigate }: NavListProps) {
   const pathname = usePathname();
+  const allHrefs = navSections.flatMap((section) => section.items.map((item) => item.href));
+  const matches = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  // L'entrée la plus spécifique gagne (ex. /training/certifications ne laisse pas /training actif).
+  const activeHref = allHrefs.filter(matches).sort((a, b) => b.length - a.length)[0];
 
   return (
     <nav className="flex flex-col gap-5 px-3 py-4">
@@ -26,7 +30,7 @@ export function NavList({ iconOnly = false, onNavigate }: NavListProps) {
             </p>
           )}
           {section.items.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isActive = item.href === activeHref;
             const link = (
               <Link
                 key={item.href}

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, ilike, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { certifications, courseCategories, courseEnrollments, courseModules, courses, people } from "@/lib/db/schema";
@@ -351,4 +351,178 @@ export async function getMyEnrollment(organizationId: string, courseId: string, 
       ),
     );
   return row ?? null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Page /training/certifications                                       */
+/* ------------------------------------------------------------------ */
+
+export const CERTIFICATIONS_PAGE_SIZE = 10;
+
+export type CertificationStatus = "obtained" | "pending" | "expired";
+
+/** Statut dérivé (aucune colonne dédiée) : expirée si `expires_at` est passé ; en cours tant qu'elle
+ * n'a pas de date d'obtention passée ; obtenue sinon. */
+const CERT_STATUS_SQL = sql<CertificationStatus>`case
+  when ${certifications.status} = 'pending' then 'pending'
+  when ${certifications.status} = 'expired'
+    or (${certifications.expiresAt} is not null and ${certifications.expiresAt} < current_date) then 'expired'
+  else 'obtained' end`;
+
+/** Qui voit quoi : les responsables (admin / `training.certify` / `training.manage`) voient tout ; les
+ * autres, les certifications « toute l'église » et les leurs quand elles sont « visibles par le membre ». */
+export interface CertificationViewer {
+  canSeeAll: boolean;
+  personId: string | null;
+}
+
+function visibilityCondition(viewer: CertificationViewer) {
+  if (viewer.canSeeAll) return undefined;
+  return viewer.personId
+    ? or(
+        eq(certifications.visibility, "organization"),
+        and(eq(certifications.visibility, "member"), eq(certifications.personId, viewer.personId)),
+      )
+    : eq(certifications.visibility, "organization");
+}
+
+export async function getCertificationStats(organizationId: string, viewer: CertificationViewer) {
+  const year = new Date().getUTCFullYear();
+  const effectiveDate = sql`coalesce(${certifications.issuedAt}, ${certifications.createdAt}::date)`;
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      members: sql<number>`count(distinct ${certifications.personId})::int`,
+      programs: sql<number>`count(distinct ${certifications.courseId})::int`,
+      obtained: sql<number>`count(*) filter (where ${CERT_STATUS_SQL} = 'obtained')::int`,
+      pending: sql<number>`count(*) filter (where ${CERT_STATUS_SQL} = 'pending')::int`,
+      expired: sql<number>`count(*) filter (where ${CERT_STATUS_SQL} = 'expired')::int`,
+      thisYear: sql<number>`count(*) filter (where extract(year from ${effectiveDate}) = ${year})::int`,
+      lastYear: sql<number>`count(*) filter (where extract(year from ${effectiveDate}) = ${year - 1})::int`,
+    })
+    .from(certifications)
+    .where(and(eq(certifications.organizationId, organizationId), visibilityCondition(viewer)));
+
+  const total = row?.total ?? 0;
+  const lastYear = row?.lastYear ?? 0;
+  return {
+    total,
+    members: row?.members ?? 0,
+    programs: row?.programs ?? 0,
+    obtained: row?.obtained ?? 0,
+    pending: row?.pending ?? 0,
+    expired: row?.expired ?? 0,
+    successRate: total === 0 ? 0 : Math.round(((row?.obtained ?? 0) / total) * 100),
+    /** Variation du nombre de certifications de l'année civile vs la précédente (`null` si pas de base de comparaison). */
+    yearDeltaPct: lastYear === 0 ? null : Math.round((((row?.thisYear ?? 0) - lastYear) / lastYear) * 100),
+  };
+}
+
+export async function getCertificationsList({
+  organizationId,
+  viewer,
+  search,
+  status,
+  page = 1,
+}: {
+  organizationId: string;
+  viewer: CertificationViewer;
+  search?: string;
+  status?: string;
+  page?: number;
+}) {
+  const conditions = [eq(certifications.organizationId, organizationId)];
+  const visible = visibilityCondition(viewer);
+  if (visible) conditions.push(visible);
+  if (search?.trim()) {
+    const term = `%${search.trim()}%`;
+    conditions.push(
+      or(
+        ilike(certifications.name, term),
+        ilike(people.firstName, term),
+        ilike(people.lastName, term),
+        ilike(courses.title, term),
+      )!,
+    );
+  }
+  if (status === "obtained" || status === "pending" || status === "expired") {
+    conditions.push(sql`${CERT_STATUS_SQL} = ${status}`);
+  }
+  const where = and(...conditions);
+
+  const [rows, [totalRow]] = await Promise.all([
+    db
+      .select({
+        id: certifications.id,
+        name: certifications.name,
+        certificateNumber: certifications.certificateNumber,
+        issuedAt: certifications.issuedAt,
+        expiresAt: certifications.expiresAt,
+        credentialUrl: certifications.credentialUrl,
+        hasFile: sql<boolean>`${certifications.filePath} is not null`,
+        courseId: courses.id,
+        courseTitle: courses.title,
+        personId: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        photoUrl: people.photoUrl,
+        status: CERT_STATUS_SQL,
+      })
+      .from(certifications)
+      .innerJoin(people, eq(people.id, certifications.personId))
+      .leftJoin(courses, eq(courses.id, certifications.courseId))
+      .where(where)
+      .orderBy(desc(sql`coalesce(${certifications.issuedAt}, ${certifications.createdAt}::date)`), desc(certifications.createdAt))
+      .limit(CERTIFICATIONS_PAGE_SIZE)
+      .offset((page - 1) * CERTIFICATIONS_PAGE_SIZE),
+    db
+      .select({ value: count() })
+      .from(certifications)
+      .innerJoin(people, eq(people.id, certifications.personId))
+      .leftJoin(courses, eq(courses.id, certifications.courseId))
+      .where(where),
+  ]);
+
+  return { rows, total: totalRow?.value ?? 0, pageSize: CERTIFICATIONS_PAGE_SIZE };
+}
+
+/** Répartition par programme (cours) : les 5 plus fréquents, le reste regroupé en « Autres ». */
+export async function getCertificationsByProgram(organizationId: string, viewer: CertificationViewer) {
+  const rows = await db
+    .select({ title: sql<string>`coalesce(${courses.title}, 'Sans programme')`, value: sql<number>`count(*)::int` })
+    .from(certifications)
+    .leftJoin(courses, eq(courses.id, certifications.courseId))
+    .where(and(eq(certifications.organizationId, organizationId), visibilityCondition(viewer)))
+    .groupBy(sql`coalesce(${courses.title}, 'Sans programme')`)
+    .orderBy(desc(sql`count(*)`));
+  const top = rows.slice(0, 5);
+  const others = rows.slice(5).reduce((sum, r) => sum + r.value, 0);
+  return others > 0 ? [...top, { title: "Autres", value: others }] : top;
+}
+
+export async function getRecentCertifications(organizationId: string, viewer: CertificationViewer, limit = 3) {
+  return db
+    .select({
+      id: certifications.id,
+      name: certifications.name,
+      issuedAt: certifications.issuedAt,
+      firstName: people.firstName,
+      lastName: people.lastName,
+      photoUrl: people.photoUrl,
+      status: CERT_STATUS_SQL,
+    })
+    .from(certifications)
+    .innerJoin(people, eq(people.id, certifications.personId))
+    .where(and(eq(certifications.organizationId, organizationId), visibilityCondition(viewer)))
+    .orderBy(desc(sql`coalesce(${certifications.issuedAt}, ${certifications.createdAt}::date)`), desc(certifications.createdAt))
+    .limit(limit);
+}
+
+/** Cours pour le sélecteur « Programme / cours » du formulaire de certification. */
+export async function getCoursesForSelect(organizationId: string) {
+  return db
+    .select({ id: courses.id, title: courses.title })
+    .from(courses)
+    .where(eq(courses.organizationId, organizationId))
+    .orderBy(asc(courses.title));
 }

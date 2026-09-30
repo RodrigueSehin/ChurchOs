@@ -130,6 +130,8 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
         <Card>
           <CardContent className="pt-5">
             <CertificationsPanel
+              courseTitle={course.title}
+              organizationId={organizationId}
               courseId={course.id}
               certifications={certifications}
               people={people}

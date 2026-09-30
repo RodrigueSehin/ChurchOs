@@ -174,6 +174,30 @@ incluses dans `db/schema.sql`).
 
 Vérifié par typecheck/lint uniquement.
 
+### Page Certifications (`/training/certifications`) et formulaire « Nouvelle certification »
+
+Nouvelle entrée « Certifications » sous Formations (le menu met désormais en surbrillance l'entrée la
+plus spécifique). Page d'après la maquette : bannière (2 Timothée 3:14), 4 KPI (délivrées avec variation
+vs année précédente, membres certifiés, programmes, taux de réussite = obtenues / total), onglets
+Toutes / En cours / Obtenues / Expirées + recherche, tableau paginé (10 par page), répartition par
+programme (anneau), statut (barres) et certifications récentes. Le formulaire (dialogue en 3 sections
+avec aperçu du certificat) sert aussi sur la fiche d'un cours (programme figé). **Migration à appliquer** :
+[`db/migrations/2026-10-05-certification-form-fields.sql`](db/migrations/2026-10-05-certification-form-fields.sql)
+(idempotente, incluse dans `db/schema.sql`) : colonnes `issuer`, `description`, `instructor_person_id`,
+`status`, `visibility`, `file_path` et bucket privé `churchos-certificates` (PDF/PNG/JPG, 5 Mo, envoi direct
+navigateur → Storage, téléchargement par URL signée).
+
+- Statut affiché : « En cours » si enregistré ainsi ; « Expirée » si enregistré ainsi ou si la date d'expiration
+  est passée ; sinon « Obtenue ».
+- Visibilité appliquée côté serveur : les responsables (admin, `training.certify`, `training.manage`) voient
+  tout ; les autres voient les certifications « toute l'église » et les leurs si « visibles par le membre ».
+- « Notifier le membre » crée une notification in-app (`notifications.person_id`) — aucun écran ne les
+  affiche encore, et aucun email/SMS n'est envoyé.
+- Non reproduit de la maquette : le bouton « Filtres » (la recherche et les onglets couvrent le besoin) et le
+  sélecteur de taille de page.
+
+Vérifié par typecheck/lint/build uniquement.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
