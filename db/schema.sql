@@ -2004,7 +2004,12 @@ drop policy if exists finance_storage_delete_org on storage.objects;
 create policy finance_storage_delete_org on storage.objects
 for delete using (
   bucket_id = 'churchos-finance'
-  and public.is_org_admin((storage.foldername(name))[1]::uuid)
+  and (
+    public.is_org_admin((storage.foldername(name))[1]::uuid)
+    -- Le téléverseur peut retirer SES fichiers : indispensable au nettoyage quand l'enregistrement
+    -- de la dépense échoue après l'envoi des justificatifs.
+    or owner_id = (select auth.uid())::text
+  )
 );
 
 -- =========================================================
@@ -2022,6 +2027,10 @@ alter table public.budgets
 -- « Nouveau budget »). Idempotent ; inclus aussi à la fin de db/schema.sql.
 alter table public.budgets
   add column if not exists ministry_id uuid references public.ministries(id) on delete set null;
+
+-- Demande à l'API Supabase (PostgREST) de recharger son cache de schéma : sans cela, les nouvelles
+-- colonnes restent introuvables ("Could not find the '...' column ... in the schema cache").
+notify pgrst, 'reload schema';
 
 -- =========================================================
 -- END

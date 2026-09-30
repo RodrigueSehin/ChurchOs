@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, FileText, FolderOpen, Plus, Save, Store, UploadCloud, Wallet, X } from "lucide-react";
 
@@ -66,6 +66,7 @@ export function ExpenseFormDialog({
   campuses,
   vendors,
   currency,
+  canApprove,
   triggerLabel = "Nouvelle dépense",
 }: {
   categories: CategoryOption[];
@@ -74,6 +75,8 @@ export function ExpenseFormDialog({
   campuses: Option[];
   vendors: string[];
   currency: string;
+  /** Sans `finance.approve`, la dépense est toujours créée « En attente » (contrôlé aussi côté serveur). */
+  canApprove: boolean;
   triggerLabel?: string;
 }) {
   const router = useRouter();
@@ -128,6 +131,7 @@ export function ExpenseFormDialog({
     setFileError(null);
   }
 
+  const [, startTransition] = useTransition();
   const [state, formAction, pending] = useActionState(async (prev: FinanceActionState, formData: FormData) => {
     const result = await createTransaction(prev, formData);
     if (result.success) {
@@ -164,7 +168,15 @@ export function ExpenseFormDialog({
           </div>
         </div>
 
-        <form ref={formRef} action={formAction} className="flex flex-col gap-5 px-6 pb-6">
+        <form ref={formRef} onSubmit={(e) => {
+            // Pas de `action={formAction}` : React 19 réinitialiserait le formulaire après CHAQUE
+            // soumission, y compris en cas d'erreur serveur (saisie et pièces jointes perdues).
+            e.preventDefault();
+            const data = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+            startTransition(() => {
+              formAction(data);
+            });
+          }} className="flex flex-col gap-5 px-6 pb-6">
           <input type="hidden" name="type" value="expense" />
 
           <section className="flex flex-col gap-4">
@@ -317,9 +329,16 @@ export function ExpenseFormDialog({
                   {Object.entries(TRANSACTION_STATUS_LABELS).map(([value, label]) => (
                     <label
                       key={value}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-600 has-[:checked]:border-primary has-[:checked]:bg-blue-50 has-[:checked]:text-primary"
+                      className={cn("flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-600 has-[:checked]:border-primary has-[:checked]:bg-blue-50 has-[:checked]:text-primary", !canApprove && value !== "pending" ? "cursor-not-allowed opacity-50" : "cursor-pointer")}
                     >
-                      <input type="radio" name="status" value={value} defaultChecked={value === "validated"} className="accent-primary" />
+                      <input
+                        type="radio"
+                        name="status"
+                        value={value}
+                        defaultChecked={value === (canApprove ? "validated" : "pending")}
+                        disabled={!canApprove && value !== "pending"}
+                        className="accent-primary"
+                      />
                       {label}
                     </label>
                   ))}

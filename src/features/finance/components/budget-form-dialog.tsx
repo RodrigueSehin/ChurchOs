@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { CalendarDays, CircleDot, FileText, FolderOpen, Gift, MapPin, MessageSquare, PiggyBank, Plus, Save, Tag, User, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -121,6 +121,7 @@ export function BudgetFormDialog({
     setEndsOn(d.end);
   }
 
+  const [, startTransition] = useTransition();
   const [state, formAction, pending] = useActionState(async (prev: FinanceActionState, formData: FormData) => {
     const result = await createBudget(prev, formData);
     if (result.success) {
@@ -151,7 +152,15 @@ export function BudgetFormDialog({
           </div>
         </div>
 
-        <form action={formAction} className="flex flex-col gap-5 px-6 pb-6">
+        <form onSubmit={(e) => {
+            // Pas de `action={formAction}` : React 19 réinitialiserait le formulaire après CHAQUE
+            // soumission, y compris en cas d'erreur serveur (saisie et pièces jointes perdues).
+            e.preventDefault();
+            const data = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+            startTransition(() => {
+              formAction(data);
+            });
+          }} className="flex flex-col gap-5 px-6 pb-6">
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_290px]">
             <div className="flex min-w-0 flex-col gap-5">
               <section className="flex flex-col gap-4">

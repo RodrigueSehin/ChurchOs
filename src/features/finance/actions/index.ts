@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { checkPermission } from "@/lib/auth/guards";
 import { db } from "@/lib/db/client";
-import { budgets } from "@/lib/db/schema";
+import { budgets, financialTransactions } from "@/lib/db/schema";
 import { createClient } from "@/lib/supabase/server";
 import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
@@ -147,6 +147,13 @@ function parseTransactionForm(formData: FormData) {
   });
 }
 
+async function removeStorageFiles(supabase: Awaited<ReturnType<typeof createClient>>, paths: string[]) {
+  if (paths.length === 0) return;
+  const { error } = await supabase.storage.from(FINANCE_BUCKET).remove(paths);
+  // Échec non bloquant mais jamais silencieux : un fichier orphelin doit laisser une trace.
+  if (error) console.error("finance: suppression Storage impossible", paths, error.message);
+}
+
 function sanitizeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
 }
@@ -183,7 +190,7 @@ export async function createTransaction(_prev: FinanceActionState, formData: For
     const path = `${organizationId}/${transactionId}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
     const { error: uploadError } = await supabase.storage.from(FINANCE_BUCKET).upload(path, file, { contentType: file.type });
     if (uploadError) {
-      if (uploaded.length > 0) await supabase.storage.from(FINANCE_BUCKET).remove(uploaded.map((u) => u.path));
+      await removeStorageFiles(supabase, uploaded.map((u) => u.path));
       return { error: `Échec du téléversement de « ${file.name} » : ${uploadError.message}` };
     }
     uploaded.push({ path, file });
@@ -203,7 +210,11 @@ export async function createTransaction(_prev: FinanceActionState, formData: For
     ["donor_name", v.donorName],
   ];
   for (const [column, value] of optional) if (value.trim() !== "") extra[column] = value.trim();
-  if (v.status !== "validated") extra.status = v.status;
+  // Workflow d'approbation : seul `finance.approve` (ou un admin) choisit le statut d'une dépense ;
+  // les autres créent une dépense « en attente ». Les recettes (dons) restent « validated ».
+  const canApprove = check.context.isAdmin || check.context.permissions.has("finance.approve");
+  const status = v.type === "expense" ? (canApprove ? v.status : "pending") : "validated";
+  if (status !== "validated") extra.status = status;
 
   const { error } = await supabase.from("financial_transactions").insert({
     id: transactionId,
@@ -222,7 +233,7 @@ export async function createTransaction(_prev: FinanceActionState, formData: For
     ...extra,
   });
   if (error) {
-    if (uploaded.length > 0) await supabase.storage.from(FINANCE_BUCKET).remove(uploaded.map((u) => u.path));
+    await removeStorageFiles(supabase, uploaded.map((u) => u.path));
     return { error: error.message };
   }
 
@@ -239,10 +250,14 @@ export async function createTransaction(_prev: FinanceActionState, formData: For
       })),
     );
     if (attachError) {
-      // La dépense est enregistrée ; seules les pièces jointes ont échoué — on le dit clairement.
-      await supabase.storage.from(FINANCE_BUCKET).remove(uploaded.map((u) => u.path));
-      revalidatePath(v.type === "income" ? "/finance/income" : "/finance/expenses");
-      return { error: `Dépense enregistrée, mais pièces jointes non conservées : ${attachError.message}` };
+      // Pas de dépense « à moitié enregistrée » : on la retire pour qu'une nouvelle tentative ne
+      // crée pas de doublon. Drizzle : la suppression RLS d'une opération est réservée aux admins,
+      // or le créateur n'en est pas forcément un — le rollback de SA ligne n'en dépend pas.
+      await db
+        .delete(financialTransactions)
+        .where(and(eq(financialTransactions.id, transactionId), eq(financialTransactions.organizationId, organizationId)));
+      await removeStorageFiles(supabase, uploaded.map((u) => u.path));
+      return { error: `Dépense non enregistrée : pièces jointes non conservées (${attachError.message}).` };
     }
   }
 

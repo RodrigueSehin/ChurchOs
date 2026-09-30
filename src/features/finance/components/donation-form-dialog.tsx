@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Gift, Landmark, MapPin, MessageSquare, Save, Tag, Wallet, CreditCard } from "lucide-react";
 
@@ -121,6 +121,7 @@ export function DonationFormDialog({
     setComment("");
   }
 
+  const [, startTransition] = useTransition();
   const [state, formAction, pending] = useActionState(async (prev: FinanceActionState, formData: FormData) => {
     const result = await createTransaction(prev, formData);
     if (result.success) {
@@ -161,7 +162,15 @@ export function DonationFormDialog({
           </div>
         </div>
 
-        <form ref={formRef} action={formAction} className="flex flex-col gap-5 px-6 pb-6">
+        <form ref={formRef} onSubmit={(e) => {
+            // Pas de `action={formAction}` : React 19 réinitialiserait le formulaire après CHAQUE
+            // soumission, y compris en cas d'erreur serveur (saisie et pièces jointes perdues).
+            e.preventDefault();
+            const data = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+            startTransition(() => {
+              formAction(data);
+            });
+          }} className="flex flex-col gap-5 px-6 pb-6">
           <input type="hidden" name="type" value="income" />
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">

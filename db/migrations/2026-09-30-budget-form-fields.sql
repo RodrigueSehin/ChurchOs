@@ -8,3 +8,7 @@ alter table public.budgets
   add column if not exists notes text,
   add column if not exists manager_person_id uuid references public.people(id) on delete set null,
   add column if not exists campus_id uuid references public.campuses(id) on delete set null;
+
+-- Demande à l'API Supabase (PostgREST) de recharger son cache de schéma : sans cela, les nouvelles
+-- colonnes restent introuvables ("Could not find the '...' column ... in the schema cache").
+notify pgrst, 'reload schema';

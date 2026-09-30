@@ -109,7 +109,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
 
   const hasFilters = Boolean(params.q || params.category || params.fund || params.method || params.from || params.to);
   const newExpense = canCreate ? (
-    <ExpenseFormDialog categories={categories} funds={funds} accounts={accounts} campuses={campuses} vendors={vendors} currency={currency} />
+    <ExpenseFormDialog categories={categories} funds={funds} accounts={accounts} campuses={campuses} vendors={vendors} currency={currency} canApprove={canApprove} />
   ) : undefined;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);

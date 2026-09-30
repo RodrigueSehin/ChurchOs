@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, lt, lte, ne, or, sql, sum } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { UUID_RE, isValidIsoDate, pctDelta } from "@/features/finance/utils";
 import {
   budgetLines,
   budgets,
@@ -46,8 +47,6 @@ export interface TransactionsFilters {
   to?: string;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const PAYMENT_METHODS = ["cash", "bank_transfer", "card", "mobile_money", "check", "online", "other"] as const;
 
 export async function getTransactions({
@@ -67,8 +66,8 @@ export async function getTransactions({
   if (paymentMethod && (PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) {
     conditions.push(eq(financialTransactions.paymentMethod, paymentMethod as (typeof PAYMENT_METHODS)[number]));
   }
-  if (from && DATE_RE.test(from)) conditions.push(gte(financialTransactions.transactionDate, from));
-  if (to && DATE_RE.test(to)) conditions.push(lte(financialTransactions.transactionDate, to));
+  if (isValidIsoDate(from)) conditions.push(gte(financialTransactions.transactionDate, from));
+  if (isValidIsoDate(to)) conditions.push(lte(financialTransactions.transactionDate, to));
   if (search?.trim()) {
     const term = `%${search.trim().replace(/[%_\\]/g, "\\$&")}%`;
     conditions.push(
@@ -124,11 +123,6 @@ export async function getTransactions({
   ]);
 
   return { rows, total: totalRows[0]?.value ?? 0, page, pageSize: TRANSACTIONS_PAGE_SIZE };
-}
-
-function pctDelta(current: number, previous: number): number {
-  if (previous <= 0) return current > 0 ? 100 : 0;
-  return Math.round(((current - previous) / previous) * 100);
 }
 
 function isoDate(d: Date) {
