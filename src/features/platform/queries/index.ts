@@ -207,7 +207,8 @@ export async function getPlatformPlans() {
       maxMembers: plans.maxMembers,
       maxCampuses: plans.maxCampuses,
       isActive: plans.isActive,
-      subscribers: sql<number>`(select count(*)::int from ${subscriptions} where ${subscriptions.planId} = ${plans.id} and ${subscriptions.status} in ('trialing','active','past_due','paused'))`,
+      // SQL qualifié : select mono-table → Drizzle n'ajoute pas de préfixe, `"id"` serait `subscriptions.id`.
+      subscribers: sql<number>`(select count(*)::int from subscriptions s where s.plan_id = "plans"."id" and s.status in ('trialing','active','past_due','paused'))`,
     })
     .from(plans)
     .orderBy(asc(plans.priceMonthly));

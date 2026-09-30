@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, ilike, isNotNull, lt, lte, ne, or, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, lt, lte, ne, or, sql, sum } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -339,4 +339,166 @@ export async function getVendorNames(organizationId: string) {
     .orderBy(asc(financialTransactions.vendorName))
     .limit(100);
   return rows.map((r) => r.name).filter((n): n is string => Boolean(n));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Budgets (page /finance/budgets)
+// ---------------------------------------------------------------------------------------------
+
+export const BUDGETS_PAGE_SIZE = 10;
+const BUDGET_STATUSES = ["draft", "active", "closed"] as const;
+
+// Sous-requêtes corrélées écrites en SQL qualifié : dans un `select` mono-table, Drizzle n'ajoute
+// pas de préfixe de table aux colonnes, et `"id"` désignerait alors `budget_lines.id` (somme à 0).
+const plannedOf = sql<string>`coalesce((select sum(bl.planned_amount) from budget_lines bl where bl.budget_id = "budgets"."id"), 0)`;
+const actualOf = sql<string>`coalesce((select sum(bl.actual_amount) from budget_lines bl where bl.budget_id = "budgets"."id"), 0)`;
+
+/** Exercices existants (du plus récent au plus ancien) — alimente le sélecteur d'exercice. */
+export async function getBudgetYears(organizationId: string) {
+  const rows = await db
+    .selectDistinct({ year: budgets.fiscalYear })
+    .from(budgets)
+    .where(eq(budgets.organizationId, organizationId))
+    .orderBy(desc(budgets.fiscalYear));
+  return rows.map((r) => r.year);
+}
+
+export async function getBudgetsOverview({
+  organizationId,
+  year,
+  status,
+  search,
+  page = 1,
+}: {
+  organizationId: string;
+  year: number;
+  status?: string;
+  search?: string;
+  page?: number;
+}) {
+  const conditions = [eq(budgets.organizationId, organizationId), eq(budgets.fiscalYear, year)];
+  if (status && (BUDGET_STATUSES as readonly string[]).includes(status)) conditions.push(eq(budgets.status, status));
+  if (search?.trim()) conditions.push(ilike(budgets.name, `%${search.trim().replace(/[%_\\]/g, "\\$&")}%`));
+  const where = and(...conditions);
+
+  const [rows, [total]] = await Promise.all([
+    db
+      .select({
+        id: budgets.id,
+        name: budgets.name,
+        fiscalYear: budgets.fiscalYear,
+        startsOn: budgets.startsOn,
+        endsOn: budgets.endsOn,
+        status: budgets.status,
+        planned: plannedOf,
+        actual: actualOf,
+      })
+      .from(budgets)
+      .where(where)
+      .orderBy(desc(budgets.startsOn), asc(budgets.name))
+      .limit(BUDGETS_PAGE_SIZE)
+      .offset((page - 1) * BUDGETS_PAGE_SIZE),
+    db.select({ value: count() }).from(budgets).where(where),
+  ]);
+
+  return { rows, total: total?.value ?? 0, page, pageSize: BUDGETS_PAGE_SIZE };
+}
+
+/** Lignes de plusieurs budgets en une requête (colonne « Catégories » et dialogue des lignes). */
+export async function getBudgetLinesByBudget(budgetIds: string[]) {
+  if (budgetIds.length === 0) return new Map<string, BudgetLineRow[]>();
+  const rows = await db
+    .select({
+      id: budgetLines.id,
+      budgetId: budgetLines.budgetId,
+      plannedAmount: budgetLines.plannedAmount,
+      actualAmount: budgetLines.actualAmount,
+      notes: budgetLines.notes,
+      categoryId: budgetLines.categoryId,
+      categoryName: financeCategories.name,
+      fundId: budgetLines.fundId,
+      fundName: funds.name,
+    })
+    .from(budgetLines)
+    .leftJoin(financeCategories, eq(financeCategories.id, budgetLines.categoryId))
+    .leftJoin(funds, eq(funds.id, budgetLines.fundId))
+    .where(inArray(budgetLines.budgetId, budgetIds))
+    .orderBy(asc(financeCategories.name));
+
+  const byBudget = new Map<string, BudgetLineRow[]>();
+  for (const r of rows) {
+    const list = byBudget.get(r.budgetId) ?? [];
+    list.push(r);
+    byBudget.set(r.budgetId, list);
+  }
+  return byBudget;
+}
+type BudgetLineRow = Awaited<ReturnType<typeof getBudgetDetail>> extends infer D
+  ? D extends { lines: (infer L)[] }
+    ? L & { budgetId: string }
+    : never
+  : never;
+
+export async function getBudgetTabCounts(organizationId: string, year: number) {
+  const rows = await db
+    .select({ status: budgets.status, value: count() })
+    .from(budgets)
+    .where(and(eq(budgets.organizationId, organizationId), eq(budgets.fiscalYear, year)))
+    .groupBy(budgets.status);
+  const by = Object.fromEntries(rows.map((r) => [r.status, r.value])) as Record<string, number>;
+  return { all: rows.reduce((sum, r) => sum + r.value, 0), draft: by.draft ?? 0, active: by.active ?? 0, closed: by.closed ?? 0 };
+}
+
+/** KPI budgets d'un exercice, avec comparaison à l'exercice précédent. */
+export async function getBudgetKpis(organizationId: string, year: number) {
+  async function totalsFor(y: number) {
+    const [row] = await db
+      .select({
+        planned: sql<string>`coalesce(sum(${budgetLines.plannedAmount}), 0)`,
+        actual: sql<string>`coalesce(sum(${budgetLines.actualAmount}), 0)`,
+      })
+      .from(budgetLines)
+      .innerJoin(budgets, eq(budgets.id, budgetLines.budgetId))
+      .where(and(eq(budgets.organizationId, organizationId), eq(budgets.fiscalYear, y)));
+    const [active] = await db
+      .select({ value: count() })
+      .from(budgets)
+      .where(and(eq(budgets.organizationId, organizationId), eq(budgets.fiscalYear, y), eq(budgets.status, "active")));
+    return { planned: Number(row?.planned ?? 0), actual: Number(row?.actual ?? 0), active: active?.value ?? 0 };
+  }
+  const [now, before] = await Promise.all([totalsFor(year), totalsFor(year - 1)]);
+  return {
+    planned: { value: now.planned, deltaPct: pctDelta(now.planned, before.planned) },
+    actual: { value: now.actual, pctOfPlanned: now.planned > 0 ? Math.round((now.actual / now.planned) * 100) : 0 },
+    remaining: { value: Math.max(now.planned - now.actual, 0), pctOfPlanned: now.planned > 0 ? Math.max(0, Math.round(((now.planned - now.actual) / now.planned) * 100)) : 0 },
+    active: { value: now.active, delta: now.active - before.active },
+  };
+}
+
+/** Prévu / engagé par catégorie sur un exercice — graphique d'exécution et donut de répartition. */
+export async function getBudgetByCategory(organizationId: string, year: number) {
+  const rows = await db
+    .select({
+      categoryName: financeCategories.name,
+      planned: sql<string>`coalesce(sum(${budgetLines.plannedAmount}), 0)`,
+      actual: sql<string>`coalesce(sum(${budgetLines.actualAmount}), 0)`,
+    })
+    .from(budgetLines)
+    .innerJoin(budgets, eq(budgets.id, budgetLines.budgetId))
+    .leftJoin(financeCategories, eq(financeCategories.id, budgetLines.categoryId))
+    .where(and(eq(budgets.organizationId, organizationId), eq(budgets.fiscalYear, year)))
+    .groupBy(financeCategories.name);
+  return rows
+    .map((r) => ({ categoryName: r.categoryName ?? "Sans catégorie", planned: Number(r.planned), actual: Number(r.actual) }))
+    .sort((a, b) => b.planned - a.planned);
+}
+
+/** Budgets modifiés le plus récemment (carte « Budget récent »). */
+export async function getRecentBudgets(organizationId: string, limit = 4) {
+  return db
+    .select({ id: budgets.id, name: budgets.name, updatedAt: budgets.updatedAt, planned: plannedOf, actual: actualOf })
+    .from(budgets)
+    .where(eq(budgets.organizationId, organizationId))
+    .orderBy(desc(budgets.updatedAt))
+    .limit(limit);
 }
