@@ -153,6 +153,11 @@ export const budgets = pgTable(
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
     status: text("status").notNull().default("draft"),
+    // Formulaire « Nouveau budget » (db/migrations/2026-09-30-budget-form-fields.sql)
+    description: text("description"),
+    notes: text("notes"),
+    managerPersonId: uuid("manager_person_id").references(() => people.id, { onDelete: "set null" }),
+    campusId: uuid("campus_id").references(() => campuses.id, { onDelete: "set null" }),
     createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
