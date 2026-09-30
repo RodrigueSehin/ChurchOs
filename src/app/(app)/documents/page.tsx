@@ -50,7 +50,7 @@ export default async function DocumentsPage({
           canManage ? (
             <div className="flex items-center gap-2">
               <FolderFormDialog parentId={params.folderId ?? null} />
-              <UploadDocumentDialog folderId={params.folderId ?? null} />
+              <UploadDocumentDialog folderId={params.folderId ?? null} organizationId={organizationId} />
             </div>
           ) : undefined
         }

@@ -20,10 +20,6 @@ function orNull(value: string) {
   return value.trim() === "" ? null : value.trim();
 }
 
-function sanitizeFilename(name: string) {
-  return name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-}
-
 export async function createFolder(_prev: DocumentActionState, formData: FormData): Promise<DocumentActionState> {
   const check = await checkPermission("documents.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de créer un dossier." };
@@ -76,51 +72,64 @@ export async function deleteFolder(folderId: string): Promise<DocumentActionStat
   return { success: true };
 }
 
-export async function uploadDocument(_prev: DocumentActionState, formData: FormData): Promise<DocumentActionState> {
+/** Enregistre en base un document dont le fichier a déjà été envoyé DIRECTEMENT du navigateur vers
+ * Supabase Storage (`<organization_id>/<uuid>-<nom>` dans le bucket privé). Le fichier ne passe
+ * pas par cette Server Action : sur Vercel, le corps d'une requête serverless est limité à
+ * ~4,5 Mo, ce qui faisait échouer tout téléversement un peu volumineux ("This page couldn't
+ * load"). Le bucket applique lui-même la taille et les types MIME ; on revérifie ici le chemin
+ * (organisation de l'appelant) et les métadonnées, et on retire l'objet si l'enregistrement échoue. */
+export async function registerDocument(input: {
+  path: string;
+  name: string;
+  folderId: string;
+  visibility: string;
+  mimeType: string;
+  sizeBytes: number;
+}): Promise<DocumentActionState> {
   const check = await checkPermission("documents.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de téléverser un document." };
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Sélectionnez un fichier." };
-  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+  const organizationId = check.organization.organization.id;
+  const supabase = await createClient();
+  const discard = () => supabase.storage.from(STORAGE_BUCKET).remove([input.path]);
+
+  if (!input.path.startsWith(`${organizationId}/`) || input.path.includes("..")) {
+    return { error: "Chemin de fichier invalide." };
+  }
+  if (!ALLOWED_MIME_TYPES.includes(input.mimeType)) {
+    await discard();
     return { error: "Type de fichier non autorisé (PDF, Word, Excel, PowerPoint, texte, CSV ou image uniquement)." };
   }
-  if (file.size > MAX_FILE_SIZE_BYTES) {
+  if (!(input.sizeBytes > 0) || input.sizeBytes > MAX_FILE_SIZE_BYTES) {
+    await discard();
     return { error: "Fichier trop volumineux (25 Mo maximum)." };
   }
 
   const parsed = documentUploadSchema.safeParse({
-    name: formData.get("name"),
-    folderId: formData.get("folderId"),
-    visibility: formData.get("visibility"),
+    name: input.name,
+    folderId: input.folderId,
+    visibility: input.visibility,
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
+  if (!parsed.success) {
+    await discard();
+    return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
+  }
   const v = parsed.data;
-
-  const organizationId = check.organization.organization.id;
-  const path = `${organizationId}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
-
-  const supabase = await createClient();
-  const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, {
-    contentType: file.type,
-  });
-  if (uploadError) return { error: `Échec du téléversement : ${uploadError.message}` };
 
   const { error: dbError } = await supabase.from("documents").insert({
     organization_id: organizationId,
     folder_id: orNull(v.folderId),
-    name: orNull(v.name) ?? file.name,
+    name: orNull(v.name) ?? input.path.split("/").pop()!.replace(/^[0-9a-f-]{36}-/, ""),
     storage_bucket: STORAGE_BUCKET,
-    storage_path: path,
-    mime_type: file.type,
-    size_bytes: file.size,
+    storage_path: input.path,
+    mime_type: input.mimeType,
+    size_bytes: input.sizeBytes,
     visibility: v.visibility,
     uploaded_by: check.user.id,
   });
   if (dbError) {
-    // Nettoie l'objet Storage orphelin plutôt que de laisser un fichier sans ligne `documents`
-    // pour le retrouver — un document sans ligne DB est invisible et inutilisable dans l'app.
-    await supabase.storage.from(STORAGE_BUCKET).remove([path]);
+    // Un objet Storage sans ligne `documents` est invisible dans l'app : on le retire.
+    await discard();
     return { error: dbError.message };
   }
 
