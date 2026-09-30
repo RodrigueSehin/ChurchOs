@@ -17,9 +17,26 @@ import {
 import { FormSelect } from "@/components/shared/form-select";
 import { updateEvent, type EventActionState } from "@/features/events/actions";
 import { EVENT_STATUS_LABELS, EVENT_VISIBILITY_LABELS } from "@/features/events/schemas";
-import type { events } from "@/lib/db/schema";
 
 const initialState: EventActionState = {};
+
+/** Sous-ensemble des colonnes de `events` nécessaires au formulaire — accepte aussi bien la ligne
+ * complète de `getEventDetail` que la ligne allégée de `getEvents` (liste), qui ne sélectionne pas
+ * toutes les colonnes de la table. */
+interface EditableEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  categoryId: string | null;
+  location: string | null;
+  startsAt: Date;
+  endsAt: Date | null;
+  visibility: string;
+  status: string;
+  capacity: number | null;
+  registrationEnabled: boolean;
+  price: string;
+}
 
 function toLocalDateTime(value: Date | string | null | undefined) {
   if (!value) return "";
@@ -31,11 +48,19 @@ function toLocalDateTime(value: Date | string | null | undefined) {
 export function EventEditDialog({
   event,
   categories,
+  trigger,
+  open: openProp,
+  onOpenChange,
 }: {
-  event: typeof events.$inferSelect;
+  event: EditableEvent;
   categories: { id: string; name: string }[];
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const boundAction = updateEvent.bind(null, event.id);
   const [state, formAction, pending] = useActionState(async (prev: EventActionState, formData: FormData) => {
     const result = await boundAction(prev, formData);
@@ -48,10 +73,14 @@ export function EventEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
-        <Pencil className="size-4" />
-        Modifier
-      </Button>
+      {trigger ? (
+        <span onClick={() => setOpen(true)}>{trigger}</span>
+      ) : (
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
+          <Pencil className="size-4" />
+          Modifier
+        </Button>
+      )}
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Modifier {event.title}</DialogTitle>
