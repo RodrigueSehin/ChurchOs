@@ -12,8 +12,22 @@ import {
 } from "@/components/ui/dialog";
 import { getRegistrationQrCode } from "@/features/registrations/actions";
 
-export function RegistrationQrDialog({ registrationId, name }: { registrationId: string; name: string }) {
-  const [open, setOpen] = useState(false);
+export function RegistrationQrDialog({
+  registrationId,
+  name,
+  trigger,
+  open: openProp,
+  onOpenChange,
+}: {
+  registrationId: string;
+  name: string;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,10 +44,14 @@ export function RegistrationQrDialog({ registrationId, name }: { registrationId:
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="secondary" size="sm" onClick={handleOpen}>
-        <QrCode className="size-4" />
-        QR
-      </Button>
+      {trigger ? (
+        <span onClick={handleOpen}>{trigger}</span>
+      ) : (
+        <Button type="button" variant="secondary" size="sm" onClick={handleOpen}>
+          <QrCode className="size-4" />
+          QR
+        </Button>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>QR d&apos;entrée — {name}</DialogTitle>

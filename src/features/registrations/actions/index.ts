@@ -71,6 +71,27 @@ export async function getRegistrationQrCode(registrationId: string): Promise<{ d
   return { dataUrl: await generateQrCodeDataUrl(row.qrToken) };
 }
 
+/** Réservé aux admins — `registrations` n'a pas de permission `.delete` dédiée (seules `.view`/
+ * `.create`/`.update` existent, voir `lib/rbac/permissions.ts`), même convention que la suppression
+ * d'un événement. */
+export async function deleteRegistration(registrationId: string): Promise<RegistrationActionState> {
+  const check = await checkPermission("registrations.update");
+  if (!check.allowed || !check.context.isAdmin) {
+    return { error: "Seul un administrateur de l'organisation peut supprimer une inscription." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("event_registrations")
+    .delete()
+    .eq("id", registrationId)
+    .eq("organization_id", check.organization.organization.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/registrations");
+  return { success: true };
+}
+
 export async function updateRegistrationStatus(registrationId: string, status: string): Promise<RegistrationActionState> {
   const check = await checkPermission("registrations.update");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de modifier cette inscription." };

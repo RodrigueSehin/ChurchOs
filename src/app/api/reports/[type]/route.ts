@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { checkPermission } from "@/lib/auth/guards";
-import { getAttendanceReport, getFinanceReportForExport, getMembersReport, type ReportData } from "@/features/reports/queries";
+import { getAttendanceReport, getFinanceReportForExport, getMembersReport, getRegistrationsReport, type ReportData } from "@/features/reports/queries";
 import { toCsv, toExcel, toPdf } from "@/features/reports/exporters";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -38,6 +38,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ type
   } else if (type === "attendance") {
     if (!canAny("attendance.view")) return NextResponse.json({ error: "Accès refusé (attendance.view)." }, { status: 403 });
     report = await getAttendanceReport(organizationId);
+  } else if (type === "registrations") {
+    if (!canAny("registrations.view")) return NextResponse.json({ error: "Accès refusé (registrations.view)." }, { status: 403 });
+    report = await getRegistrationsReport(organizationId);
   } else if (type === "finance") {
     // Gaté sur `finance.view`, jamais seulement `reports.export` — voir la leçon de la Phase 9.
     if (!canAny("finance.view")) return NextResponse.json({ error: "Accès refusé (finance.view)." }, { status: 403 });

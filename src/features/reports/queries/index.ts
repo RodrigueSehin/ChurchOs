@@ -3,6 +3,8 @@ import "server-only";
 import { getAllMembersForExport } from "@/features/members/services";
 import { getAttendanceSessions } from "@/features/attendance/services";
 import { getFinanceReport } from "@/features/finance/services";
+import { getRegistrationsForExport } from "@/features/registrations/services";
+import { REGISTRATION_STATUS_LABELS, paymentLabelFor } from "@/features/registrations/schemas";
 
 export interface ReportColumn {
   key: string;
@@ -67,6 +69,31 @@ export async function getAttendanceReport(organizationId: string): Promise<Repor
       startsAt: formatDateTime(s.startsAt),
       location: s.location ?? "",
       recordCount: String(s.recordCount),
+    })),
+  };
+}
+
+export async function getRegistrationsReport(organizationId: string): Promise<ReportData> {
+  const rows = await getRegistrationsForExport(organizationId);
+  return {
+    title: "Rapport des inscriptions",
+    columns: [
+      { key: "name", label: "Nom et prénoms" },
+      { key: "type", label: "Type de participant" },
+      { key: "email", label: "Email" },
+      { key: "eventTitle", label: "Événement" },
+      { key: "registeredAt", label: "Date d'inscription" },
+      { key: "status", label: "Statut" },
+      { key: "payment", label: "Paiement" },
+    ],
+    rows: rows.map((r) => ({
+      name: r.personId ? `${r.personFirstName} ${r.personLastName}` : (r.guestName ?? "—"),
+      type: r.personId ? "Membre" : "Visiteur",
+      email: (r.personId ? r.personEmail : r.guestEmail) ?? "",
+      eventTitle: r.eventTitle,
+      registeredAt: formatDateTime(r.registeredAt),
+      status: REGISTRATION_STATUS_LABELS[r.status] ?? r.status,
+      payment: paymentLabelFor(r.amount, r.paymentStatus),
     })),
   };
 }
