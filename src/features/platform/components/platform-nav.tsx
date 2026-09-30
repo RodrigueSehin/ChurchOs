@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/platform", label: "Vue d'ensemble", exact: true },
   { href: "/platform/organizations", label: "Églises", exact: false },
+  { href: "/platform/plans", label: "Plans", exact: false },
+  { href: "/platform/audit", label: "Journal", exact: false },
 ];
 
 export function PlatformNav() {

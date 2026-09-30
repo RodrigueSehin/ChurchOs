@@ -1,8 +1,9 @@
 import "server-only";
-import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
+  auditLogs,
   authUsers,
   campuses,
   members,
@@ -163,4 +164,51 @@ export async function getPlatformOrganizationDetail(id: string) {
     userTotal: userTotal?.total ?? 0,
     campusTotal: campusTotal?.total ?? 0,
   };
+}
+
+export const PLATFORM_AUDIT_PAGE_SIZE = 25;
+
+/** Journal des actions de la plateforme (`platform.*`) — uniquement ces actions : le journal
+ * d'audit complet des églises reste le leur, la plateforme n'en lit que sa propre trace. */
+export async function getPlatformAuditLog(page: number) {
+  const where = sql`${auditLogs.action} like 'platform.%'`;
+  const [rows, [total]] = await Promise.all([
+    db
+      .select({
+        id: auditLogs.id,
+        action: auditLogs.action,
+        createdAt: auditLogs.createdAt,
+        metadata: auditLogs.metadata,
+        organizationId: auditLogs.organizationId,
+        organizationName: organizations.name,
+        actorEmail: authUsers.email,
+      })
+      .from(auditLogs)
+      .leftJoin(organizations, eq(organizations.id, auditLogs.organizationId))
+      .leftJoin(authUsers, eq(authUsers.id, auditLogs.userId))
+      .where(where)
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(PLATFORM_AUDIT_PAGE_SIZE)
+      .offset((page - 1) * PLATFORM_AUDIT_PAGE_SIZE),
+    db.select({ total: count() }).from(auditLogs).where(where),
+  ]);
+  return { rows, total: total?.total ?? 0 };
+}
+
+export async function getPlatformPlans() {
+  return db
+    .select({
+      id: plans.id,
+      code: plans.code,
+      name: plans.name,
+      priceMonthly: plans.priceMonthly,
+      priceYearly: plans.priceYearly,
+      currency: plans.currency,
+      maxMembers: plans.maxMembers,
+      maxCampuses: plans.maxCampuses,
+      isActive: plans.isActive,
+      subscribers: sql<number>`(select count(*)::int from ${subscriptions} where ${subscriptions.planId} = ${plans.id} and ${subscriptions.status} in ('trialing','active','past_due','paused'))`,
+    })
+    .from(plans)
+    .orderBy(asc(plans.priceMonthly));
 }
