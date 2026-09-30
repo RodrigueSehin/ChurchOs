@@ -53,21 +53,29 @@ théorie — voir plus haut).
 
 ## État du projet
 
-**Phase 1 — Foundation** ✅ et **Phase 2 — Database** ✅ : terminées.
+Détail complet par phase : [`docs/architecture/07-sprint-plan.md`](docs/architecture/07-sprint-plan.md).
 
-- Next.js 16 (App Router, Turbopack) + TypeScript strict + Tailwind CSS + composants UI façon
-  shadcn/ui (Radix + CVA) + layout applicatif complet (sidebar responsive, topbar, breadcrumb,
-  footer) + dashboard avec données de démonstration + pages de tous les modules de la navigation
-  en état "en construction" honnête (pas de fonctionnalité simulée).
-- Base de données : le schéma **réel** du projet Supabase (`db/schema.sql`, ~50 tables, fonctions
-  PL/pgSQL, triggers, RLS, seed RBAC/plans) appliqué et vérifié sur Postgres local ; Row Level
-  Security **prouvé** par un test d'isolation multi-tenant (`npm run db:verify-rls`) ; miroir
-  Drizzle TypeScript (`src/lib/db/schema/`) pour le requêtage type-safe ; seed de démonstration
-  fonctionnel (via la RPC `create_organization_for_current_user`).
-**Phase 3 — Authentication** 🚧 : en cours. Login/register/logout/reset-password + onboarding
-5 étapes (appelant la vraie RPC `create_organization_for_current_user`) écrits et vérifiés par
-build/typecheck/lint, mais **pas testés en conditions réelles** — bloqué sur les identifiants du
-vrai projet Supabase (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY`), à renseigner dans `.env.local`. Sans eux, toute page protégée
-retourne une erreur explicite (vérifié). Voir
-[`docs/architecture/07-sprint-plan.md`](docs/architecture/07-sprint-plan.md) pour le détail complet.
+| Phase | Statut |
+| --- | --- |
+| 1 Foundation, 2 Database | ✅ Livrées (schéma Supabase réel, RLS prouvé par `npm run db:verify-rls`, miroir Drizzle, seed) |
+| 3 Authentication, 4 Organization (RBAC) | ✅ Livrées, vérifiées en conditions réelles |
+| 5 Members, 6 Pastoral, 7 Ministries | ✅ Livrées, vérifiées en conditions réelles |
+| 8 Events, 9 Finance, 10 Training | ✅ Livrées, vérifiées en conditions réelles |
+| 11 Communication, 12 Documents & Resources, 13 Analytics | ✅ Livrées, vérifiées en conditions réelles |
+| 14 Billing (Stripe) | 🚧 Architecture livrée ; création client + session Checkout vérifiées en direct. Reste : paiement de test (carte `4242…`, à faire manuellement), synchronisation au retour, proratisation, annulation, facture |
+| 15 ChurchOS AI | 🚧 Architecture livrée (tool-calling, filtrage par permission) ; vérification live bloquée par un `429` OpenAI (crédit manquant) |
+
+### Refonte visuelle selon les maquettes
+
+Terminée : tableau de bord, menu latéral, Membres, Familles, Visiteurs, Groupes, Suivi pastoral,
+Sujets de prière, Visites, Conseil pastoral, Ministères, Ouvriers, Services, Calendrier, Plannings,
+Événements, Inscriptions, Présences, et la page Vitrine (site marketing public).
+
+### Reste à faire
+
+- **Page de l'utilisateur connecté (`/settings/profile`) : pas encore terminée.**
+- Refonte selon les maquettes des modules restants : Finance, Training, Communication, Documents,
+  Resources, Analytics, Reports, Settings, AI, Teams.
+- Finir la vérification live des Phases 14 et 15, puis les marquer ✅.
+- Reporté volontairement : paiements mobiles (Orange Money, MTN, Wave), RAG/pgvector, streaming des
+  réponses IA, `lib/feature-flags/`, alertes de paiement en retard.
