@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireOrganization, requireUser } from "@/lib/auth/session";
 import { resolveMembershipContext } from "@/lib/rbac/resolve";
+import { AvatarPicker } from "@/features/profile/components/avatar-picker";
 import { ProfileForm } from "@/features/profile/components/profile-form";
 import { ChangePasswordForm } from "@/features/profile/components/change-password-form";
 
@@ -47,6 +48,16 @@ export default async function ProfilePage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Avatar</CardTitle>
+          <CardDescription>Choisissez un avatar ou ajoutez votre photo — il apparaît en haut à droite de l&apos;application.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AvatarPicker name={fullName} initials={initials} avatarUrl={p?.avatarUrl ?? null} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Informations personnelles</CardTitle>
           <CardDescription>Ces informations sont propres à votre compte.</CardDescription>
         </CardHeader>
@@ -57,7 +68,6 @@ export default async function ProfilePage() {
               lastName,
               email: user.email,
               phone: p?.phone ?? "",
-              avatarUrl: p?.avatarUrl ?? "",
               timezone: p?.timezone ?? "Africa/Abidjan",
               currency: p?.currency ?? "XOF",
             }}

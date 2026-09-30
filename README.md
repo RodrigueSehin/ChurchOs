@@ -117,6 +117,13 @@ logo, ChurchOS s'affiche. La Vitrine et les pages d'authentification gardent tou
 ChurchOS. Migration : [`db/migrations/2026-10-01-organization-logos.sql`](db/migrations/2026-10-01-organization-logos.sql)
 (idempotente, incluse dans `db/schema.sql`).
 
+### Avatar de l'utilisateur
+
+Profil > Avatar : 12 avatars prédéfinis (`public/avatars/*.svg`, un clic) ou photo personnelle
+(PNG/JPEG/WebP, 2 Mo, bucket public `churchos-avatars`, dossier `<user_id>/`). Sans avatar, les
+initiales s'affichent. Migration : [`db/migrations/2026-10-01-user-avatars.sql`](db/migrations/2026-10-01-user-avatars.sql)
+(idempotente, incluse dans `db/schema.sql`).
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
