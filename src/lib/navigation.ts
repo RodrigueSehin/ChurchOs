@@ -23,6 +23,7 @@ import {
   PiggyBank,
   FileBarChart,
   GraduationCap,
+  Award,
   Megaphone,
   FolderOpen,
   Warehouse,
@@ -97,7 +98,10 @@ export const navSections: NavSection[] = [
   },
   {
     label: "Formations",
-    items: [{ title: "Cours & discipolat", href: "/training", icon: GraduationCap, phase: 10 }],
+    items: [
+      { title: "Cours & discipolat", href: "/training", icon: GraduationCap, phase: 10 },
+      { title: "Certifications", href: "/training/certifications", icon: Award, phase: 10 },
+    ],
   },
   {
     label: "Communication",

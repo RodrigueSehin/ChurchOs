@@ -4,10 +4,18 @@ import { revalidatePath } from "next/cache";
 
 import { checkPermission } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
+import { getPersonIdForUser } from "@/features/training/queries";
 import {
+  CERTIFICATE_BUCKET,
   certificationSchema,
   courseModuleSchema,
+  courseCategorySchema,
+  courseCoverStoragePath,
   courseSchema,
+  isHttpUrl,
+  COURSE_COVER_BUCKET,
+  COURSE_COVER_MAX_BYTES,
+  COURSE_COVER_MIME_EXTENSIONS,
   enrollPersonSchema,
 } from "@/features/training/schemas";
 
@@ -27,12 +35,62 @@ function orNumber(value: string) {
 function parseCourseForm(formData: FormData) {
   return courseSchema.safeParse({
     title: formData.get("title"),
+    category: formData.get("category"),
     description: formData.get("description"),
-    status: formData.get("status"),
     instructorPersonId: formData.get("instructorPersonId"),
-    imageUrl: formData.get("imageUrl"),
-    durationMinutes: formData.get("durationMinutes"),
+    prerequisites: formData.get("prerequisites"),
+    level: formData.get("level"),
+    status: formData.get("status"),
+    publishedAt: formData.get("publishedAt"),
+    allowEnrollment: formData.get("allowEnrollment"),
+    showInLibrary: formData.get("showInLibrary"),
+    moduleCount: formData.get("moduleCount"),
+    moduleMinutes: formData.get("moduleMinutes"),
   });
+}
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+function coverFile(formData: FormData) {
+  const file = formData.get("cover");
+  return file instanceof File && file.size > 0 ? file : undefined;
+}
+
+function validateCover(file: File | undefined) {
+  if (!file) return null;
+  if (!COURSE_COVER_MIME_EXTENSIONS[file.type]) return "Image de couverture : PNG, JPEG ou WebP uniquement.";
+  if (file.size > COURSE_COVER_MAX_BYTES) return "Image de couverture trop volumineuse (2 Mo maximum).";
+  return null;
+}
+
+async function uploadCover(supabase: Supabase, organizationId: string, courseId: string, file: File) {
+  const path = `${organizationId}/${courseId}/cover-${crypto.randomUUID()}.${COURSE_COVER_MIME_EXTENSIONS[file.type]}`;
+  const { error } = await supabase.storage.from(COURSE_COVER_BUCKET).upload(path, file, { contentType: file.type });
+  if (error) return { error: `Échec du téléversement de l'image : ${error.message}` };
+  return { url: supabase.storage.from(COURSE_COVER_BUCKET).getPublicUrl(path).data.publicUrl, path };
+}
+
+async function removeCoverFile(supabase: Supabase, url: string | null | undefined) {
+  const path = courseCoverStoragePath(url);
+  if (!path) return;
+  const { error } = await supabase.storage.from(COURSE_COVER_BUCKET).remove([path]);
+  if (error) console.error("training: suppression de l'ancienne couverture impossible", error.message);
+}
+
+function courseColumns(v: ReturnType<typeof courseSchema.parse>, coInstructorIds: string[]) {
+  return {
+    title: v.title,
+    category: v.category,
+    description: v.description,
+    status: v.status,
+    instructor_person_id: v.instructorPersonId,
+    co_instructor_ids: coInstructorIds.filter((id) => id !== v.instructorPersonId),
+    prerequisites: orNull(v.prerequisites),
+    level: v.level,
+    published_at: orNull(v.publishedAt),
+    allow_enrollment: v.allowEnrollment,
+    show_in_library: v.showInLibrary,
+  };
 }
 
 export async function createCourse(_prev: TrainingActionState, formData: FormData): Promise<TrainingActionState> {
@@ -43,17 +101,59 @@ export async function createCourse(_prev: TrainingActionState, formData: FormDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
 
+  const moduleCount = Number(v.moduleCount);
+  if (!Number.isInteger(moduleCount) || moduleCount < 1 || moduleCount > 100) {
+    return { error: "Nombre de modules : entre 1 et 100." };
+  }
+  const moduleMinutes = orNumber(v.moduleMinutes);
+  if (moduleMinutes !== null && (!Number.isInteger(moduleMinutes) || moduleMinutes < 0)) {
+    return { error: "Durée par module invalide (minutes, nombre entier)." };
+  }
+  const cover = coverFile(formData);
+  const coverError = validateCover(cover);
+  if (coverError) return { error: coverError };
+  const externalUrl = orNull(String(formData.get("imageUrl") ?? ""));
+  if (externalUrl && !isHttpUrl(externalUrl)) return { error: "URL de l'image invalide (http ou https uniquement)." };
+
+  const organizationId = check.organization.organization.id;
   const supabase = await createClient();
-  const { error } = await supabase.from("courses").insert({
-    organization_id: check.organization.organization.id,
-    title: v.title,
-    description: orNull(v.description),
-    status: v.status,
-    instructor_person_id: orNull(v.instructorPersonId),
-    image_url: orNull(v.imageUrl),
-    duration_minutes: orNumber(v.durationMinutes),
-  });
+  const { data: course, error } = await supabase
+    .from("courses")
+    .insert({
+      organization_id: organizationId,
+      image_url: cover ? null : externalUrl,
+      ...courseColumns(v, formData.getAll("coInstructorIds").map(String)),
+      duration_minutes: moduleMinutes !== null ? moduleMinutes * moduleCount : null,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
+
+  // Un cours est inutilisable s'il échoue à mi-création : en cas d'erreur sur les modules ou la
+  // couverture, on retire le cours (les modules partent en cascade) pour que l'utilisateur réessaie.
+  const rollback = async (message: string, coverPath?: string) => {
+    if (coverPath) await supabase.storage.from(COURSE_COVER_BUCKET).remove([coverPath]);
+    await supabase.from("courses").delete().eq("id", course.id).eq("organization_id", organizationId);
+    return { error: message };
+  };
+
+  const { error: modulesError } = await supabase.from("course_modules").insert(
+    Array.from({ length: moduleCount }, (_, i) => ({
+      organization_id: organizationId,
+      course_id: course.id,
+      title: `Module ${i + 1}`,
+      sort_order: i + 1,
+      duration_minutes: moduleMinutes,
+    })),
+  );
+  if (modulesError) return rollback(modulesError.message);
+
+  if (cover) {
+    const uploaded = await uploadCover(supabase, organizationId, course.id, cover);
+    if (uploaded.error !== undefined) return rollback(uploaded.error);
+    const { error: coverSaveError } = await supabase.from("courses").update({ image_url: uploaded.url }).eq("id", course.id);
+    if (coverSaveError) return rollback(coverSaveError.message, uploaded.path);
+  }
 
   revalidatePath("/training");
   return { success: true };
@@ -70,21 +170,51 @@ export async function updateCourse(
   const parsed = parseCourseForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
+  const cover = coverFile(formData);
+  const coverError = validateCover(cover);
+  if (coverError) return { error: coverError };
+  const removeCover = formData.get("removeCover") === "on";
+  const externalUrl = orNull(String(formData.get("imageUrl") ?? ""));
+  if (externalUrl && !isHttpUrl(externalUrl)) return { error: "URL de l'image invalide (http ou https uniquement)." };
 
+  const organizationId = check.organization.organization.id;
   const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("courses")
+    .select("image_url")
+    .eq("id", courseId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (!existing) return { error: "Cours introuvable." };
+
+  let imageUrl: string | null | undefined; // undefined = inchangée
+  let uploadedPath: string | undefined;
+  if (cover) {
+    const uploaded = await uploadCover(supabase, organizationId, courseId, cover);
+    if (uploaded.error !== undefined) return { error: uploaded.error };
+    imageUrl = uploaded.url;
+    uploadedPath = uploaded.path;
+  } else if (removeCover) {
+    imageUrl = null;
+  } else if (externalUrl !== existing.image_url && !(externalUrl === null && courseCoverStoragePath(existing.image_url))) {
+    // URL externe saisie (ou effacée) ; une couverture téléversée n'est jamais écrasée par un champ vide.
+    imageUrl = externalUrl;
+  }
+
   const { error } = await supabase
     .from("courses")
     .update({
-      title: v.title,
-      description: orNull(v.description),
-      status: v.status,
-      instructor_person_id: orNull(v.instructorPersonId),
-      image_url: orNull(v.imageUrl),
-      duration_minutes: orNumber(v.durationMinutes),
+      ...courseColumns(v, formData.getAll("coInstructorIds").map(String)),
+      ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
     })
     .eq("id", courseId)
-    .eq("organization_id", check.organization.organization.id);
-  if (error) return { error: error.message };
+    .eq("organization_id", organizationId);
+  if (error) {
+    if (uploadedPath) await supabase.storage.from(COURSE_COVER_BUCKET).remove([uploadedPath]);
+    return { error: error.message };
+  }
+  if (imageUrl !== undefined) await removeCoverFile(supabase, existing.image_url);
 
   revalidatePath("/training");
   revalidatePath(`/training/${courseId}`);
@@ -100,12 +230,19 @@ export async function deleteCourse(courseId: string): Promise<TrainingActionStat
   }
 
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("courses")
+    .select("image_url")
+    .eq("id", courseId)
+    .eq("organization_id", check.organization.organization.id)
+    .single();
   const { error } = await supabase
     .from("courses")
     .delete()
     .eq("id", courseId)
     .eq("organization_id", check.organization.organization.id);
   if (error) return { error: error.message };
+  await removeCoverFile(supabase, existing?.image_url);
 
   revalidatePath("/training");
   return { success: true };
@@ -263,6 +400,10 @@ export async function removeEnrollment(courseId: string, enrollmentId: string): 
   return { success: true };
 }
 
+/** Enregistre une certification. Le fichier éventuel a déjà été envoyé DIRECTEMENT du navigateur vers
+ * Storage (la limite de corps de requête de Vercel, ~4,5 Mo, est inférieure aux 5 Mo autorisés) ;
+ * `filePath` ne référence que ce fichier — son préfixe est revérifié ici, et l'objet est retiré si
+ * l'enregistrement échoue. */
 export async function issueCertification(
   courseId: string | null,
   _prev: TrainingActionState,
@@ -271,39 +412,108 @@ export async function issueCertification(
   const check = await checkPermission("training.certify");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de délivrer une certification." };
 
+  const organizationId = check.organization.organization.id;
+  const supabase = await createClient();
+  const filePath = orNull(String(formData.get("filePath") ?? ""));
+  const discard = async () => {
+    if (filePath) await supabase.storage.from(CERTIFICATE_BUCKET).remove([filePath]);
+  };
+
+  if (filePath && (!filePath.startsWith(`${organizationId}/`) || filePath.includes(".."))) {
+    return { error: "Chemin de fichier invalide." };
+  }
+
   const parsed = certificationSchema.safeParse({
     personId: formData.get("personId"),
     courseId: formData.get("courseId") || (courseId ?? ""),
     name: formData.get("name"),
+    issuer: formData.get("issuer"),
+    description: formData.get("description"),
     certificateNumber: formData.get("certificateNumber"),
     issuedAt: formData.get("issuedAt"),
     expiresAt: formData.get("expiresAt"),
+    instructorPersonId: formData.get("instructorPersonId"),
+    status: formData.get("status"),
+    visibility: formData.get("visibility"),
+    notifyMember: formData.get("notifyMember"),
     credentialUrl: formData.get("credentialUrl"),
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
+  if (!parsed.success) {
+    await discard();
+    return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
+  }
   const v = parsed.data;
 
-  const supabase = await createClient();
   const { error } = await supabase.from("certifications").insert({
-    organization_id: check.organization.organization.id,
+    organization_id: organizationId,
     course_id: orNull(v.courseId),
     person_id: v.personId,
     name: v.name,
+    issuer: orNull(v.issuer),
+    description: orNull(v.description),
     certificate_number: orNull(v.certificateNumber),
     issued_at: orNull(v.issuedAt),
     expires_at: orNull(v.expiresAt),
+    instructor_person_id: orNull(v.instructorPersonId),
+    status: v.status,
+    visibility: v.visibility,
+    file_path: filePath,
     credential_url: orNull(v.credentialUrl),
   });
   if (error) {
+    await discard();
     if (error.message.includes("duplicate") || error.message.includes("unique")) {
       return { error: "Un certificat avec ce numéro existe déjà." };
     }
     return { error: error.message };
   }
 
+  if (v.notifyMember) {
+    // Notification in-app adressée à la personne ; un échec ici ne doit pas annuler la certification.
+    const { error: notifyError } = await supabase.from("notifications").insert({
+      organization_id: organizationId,
+      person_id: v.personId,
+      channel: "in_app",
+      title: "Nouvelle certification",
+      body: `Vous avez reçu la certification « ${v.name} ».`,
+      status: "sent",
+      sent_at: new Date().toISOString(),
+      data: { type: "certification" },
+    });
+    if (notifyError) console.error("training: notification de certification impossible", notifyError.message);
+  }
+
   if (courseId) revalidatePath(`/training/${courseId}`);
   revalidatePath("/training");
+  revalidatePath("/training/certifications");
   return { success: true };
+}
+
+/** URL signée (5 min) du fichier d'une certification : la visibilité est revérifiée ici, en plus de
+ * la policy RLS du bucket. */
+export async function getCertificateDownloadUrl(certificationId: string): Promise<{ url?: string; error?: string }> {
+  const check = await checkPermission("training.view");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de voir ce fichier." };
+
+  const organizationId = check.organization.organization.id;
+  const supabase = await createClient();
+  const { data: cert } = await supabase
+    .from("certifications")
+    .select("file_path, person_id, visibility")
+    .eq("id", certificationId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (!cert?.file_path) return { error: "Aucun fichier pour cette certification." };
+
+  const canSeeAll = check.context.isAdmin || check.context.permissions.has("training.certify") || check.context.permissions.has("training.manage");
+  if (!canSeeAll && cert.visibility !== "organization") {
+    const personId = await getPersonIdForUser(organizationId, check.user.email);
+    if (!(cert.visibility === "member" && personId === cert.person_id)) return { error: "Ce fichier n'est pas visible pour vous." };
+  }
+
+  const { data, error } = await supabase.storage.from(CERTIFICATE_BUCKET).createSignedUrl(cert.file_path, 300);
+  if (error || !data) return { error: error?.message ?? "Échec de la génération du lien." };
+  return { url: data.signedUrl };
 }
 
 /** Réservé aux admins — même contrainte que la suppression d'un cours. */
@@ -314,14 +524,102 @@ export async function deleteCertification(courseId: string | null, certification
   }
 
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("certifications")
+    .select("file_path")
+    .eq("id", certificationId)
+    .eq("organization_id", check.organization.organization.id)
+    .single();
   const { error } = await supabase
     .from("certifications")
     .delete()
     .eq("id", certificationId)
     .eq("organization_id", check.organization.organization.id);
   if (error) return { error: error.message };
+  if (existing?.file_path) await supabase.storage.from(CERTIFICATE_BUCKET).remove([existing.file_path]);
 
   if (courseId) revalidatePath(`/training/${courseId}`);
   revalidatePath("/training");
+  revalidatePath("/training/certifications");
+  return { success: true };
+}
+
+/* ------------------------------ Catégories ------------------------------ */
+
+export async function createCourseCategory(_prev: TrainingActionState, formData: FormData): Promise<TrainingActionState> {
+  const check = await checkPermission("training.manage");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de gérer les catégories." };
+
+  const parsed = courseCategorySchema.safeParse({ name: formData.get("name") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("course_categories")
+    .insert({ organization_id: check.organization.organization.id, name: parsed.data.name });
+  if (error) {
+    if (error.message.includes("duplicate") || error.message.includes("unique")) {
+      return { error: "Une catégorie avec ce nom existe déjà." };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/training");
+  return { success: true };
+}
+
+/** Les cours qui portent ce nom de catégorie le conservent (la colonne `courses.category` est un texte). */
+export async function deleteCourseCategory(categoryId: string): Promise<TrainingActionState> {
+  const check = await checkPermission("training.manage");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de gérer les catégories." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("course_categories")
+    .delete()
+    .eq("id", categoryId)
+    .eq("organization_id", check.organization.organization.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/training");
+  return { success: true };
+}
+
+/* ------------------------- Auto-inscription ------------------------- */
+
+/** Un membre s'inscrit lui-même : le cours doit être publié et autoriser l'inscription
+ * (`allow_enrollment`). Les gestionnaires, eux, inscrivent toujours via `enrollPerson`. La personne
+ * est retrouvée par email (aucun lien direct compte ↔ fiche dans le schéma). */
+export async function enrollSelf(courseId: string): Promise<TrainingActionState> {
+  const check = await checkPermission("training.view");
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de vous inscrire." };
+
+  const organizationId = check.organization.organization.id;
+  const personId = await getPersonIdForUser(organizationId, check.user.email);
+  if (!personId) {
+    return { error: "Aucune fiche membre n'est associée à votre email : demandez à un responsable de vous inscrire." };
+  }
+
+  const supabase = await createClient();
+  const { data: course } = await supabase
+    .from("courses")
+    .select("status, allow_enrollment")
+    .eq("id", courseId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (!course) return { error: "Cours introuvable." };
+  if (course.status !== "published") return { error: "Ce cours n'est pas ouvert aux inscriptions." };
+  if (!course.allow_enrollment) return { error: "Les inscriptions à ce cours sont fermées." };
+
+  const { error } = await supabase
+    .from("course_enrollments")
+    .insert({ organization_id: organizationId, course_id: courseId, person_id: personId, status: "enrolled" });
+  if (error) {
+    if (error.message.includes("duplicate") || error.message.includes("unique")) return { success: true };
+    return { error: error.message };
+  }
+
+  revalidatePath("/training");
+  revalidatePath(`/training/${courseId}`);
   return { success: true };
 }

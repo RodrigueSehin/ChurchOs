@@ -1,52 +1,51 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Award, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { FormSelect } from "@/components/shared/form-select";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
-import { deleteCertification, issueCertification, type TrainingActionState } from "@/features/training/actions";
+import { deleteCertification } from "@/features/training/actions";
+import { CertificationFormDialog } from "@/features/training/components/certification-form-dialog";
 import type { getCourseDetail } from "@/features/training/queries";
 
 type Certification = NonNullable<Awaited<ReturnType<typeof getCourseDetail>>>["certifications"][number];
 
-const initialState: TrainingActionState = {};
-
 export function CertificationsPanel({
   courseId,
+  courseTitle,
+  organizationId,
   certifications,
   people,
   canManage,
   isAdmin,
 }: {
   courseId: string;
+  courseTitle: string;
+  organizationId: string;
   certifications: Certification[];
   people: { id: string; name: string }[];
   canManage: boolean;
   isAdmin: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-navy">Certifications ({certifications.length})</p>
         {canManage && (
-          <Button type="button" size="sm" onClick={() => setOpen(true)}>
-            <Plus className="size-4" />
-            Délivrer
-          </Button>
+          <CertificationFormDialog
+            organizationId={organizationId}
+            people={people}
+            courses={[{ id: courseId, title: courseTitle }]}
+            courseId={courseId}
+            trigger={
+              <Button type="button" size="sm">
+                <Plus className="size-4" />
+                Délivrer
+              </Button>
+            }
+          />
         )}
       </div>
 
@@ -60,7 +59,6 @@ export function CertificationsPanel({
         </div>
       )}
 
-      <IssueCertificationDialog courseId={courseId} people={people} open={open} onOpenChange={setOpen} />
     </div>
   );
 }
@@ -114,82 +112,5 @@ function CertificationRow({
         )}
       </div>
     </div>
-  );
-}
-
-function IssueCertificationDialog({
-  courseId,
-  people,
-  open,
-  onOpenChange,
-}: {
-  courseId: string;
-  people: { id: string; name: string }[];
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const boundAction = issueCertification.bind(null, courseId);
-  const [state, formAction, pending] = useActionState(async (prev: TrainingActionState, formData: FormData) => {
-    const result = await boundAction(prev, formData);
-    if (result.success) {
-      onOpenChange(false);
-      window.location.reload();
-    }
-    return result;
-  }, initialState);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Délivrer une certification</DialogTitle>
-        </DialogHeader>
-        <form action={formAction} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cert-personId">Personne *</Label>
-            <FormSelect id="cert-personId" name="personId" required defaultValue="">
-              <option value="" disabled>
-                Choisir une personne
-              </option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </FormSelect>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cert-name">Nom du certificat *</Label>
-            <Input id="cert-name" name="name" placeholder="Ex : Certificat de discipolat" required />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cert-number">Numéro (optionnel)</Label>
-              <Input id="cert-number" name="certificateNumber" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cert-issued">Délivrée le (optionnel)</Label>
-              <Input id="cert-issued" name="issuedAt" type="date" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cert-expires">Expire le (optionnel)</Label>
-              <Input id="cert-expires" name="expiresAt" type="date" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cert-url">Lien du certificat (optionnel)</Label>
-              <Input id="cert-url" name="credentialUrl" placeholder="https://..." />
-            </div>
-          </div>
-          {state.error && <p className="text-sm text-danger">{state.error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Délivrance..." : "Délivrer"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

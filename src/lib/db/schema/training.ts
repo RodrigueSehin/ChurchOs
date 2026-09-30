@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   integer,
@@ -29,9 +30,29 @@ export const courses = pgTable("courses", {
   }),
   imageUrl: text("image_url"),
   durationMinutes: integer("duration_minutes"),
+  category: text("category"),
+  level: text("level"),
+  prerequisites: text("prerequisites"),
+  publishedAt: date("published_at"),
+  allowEnrollment: boolean("allow_enrollment").notNull().default(true),
+  showInLibrary: boolean("show_in_library").notNull().default(true),
+  coInstructorIds: uuid("co_instructor_ids").array().notNull().default(sql`'{}'::uuid[]`),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const courseCategories = pgTable(
+  "course_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("course_categories_org_name_unique").on(table.organizationId, table.name)],
+);
 
 export const courseModules = pgTable("course_modules", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -90,6 +111,12 @@ export const certifications = pgTable(
     issuedAt: date("issued_at"),
     expiresAt: date("expires_at"),
     credentialUrl: text("credential_url"),
+    issuer: text("issuer"),
+    description: text("description"),
+    instructorPersonId: uuid("instructor_person_id").references(() => people.id, { onDelete: "set null" }),
+    status: text("status").notNull().default("obtained"),
+    visibility: text("visibility").notNull().default("managers"),
+    filePath: text("file_path"),
     metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

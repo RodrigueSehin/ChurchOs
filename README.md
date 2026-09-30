@@ -136,6 +136,68 @@ initiales s'affichent. Migration : [`db/migrations/2026-10-01-user-avatars.sql`]
   migration. Un `error.tsx` global à `(app)` affiche un message au lieu de la page d'erreur
   générique. Vérifié par typecheck/lint uniquement — à tester en conditions réelles.
 
+### Refonte /training (Cours & Discipolat)
+
+Selon la maquette : bannière (Matthieu 28:19) avec « Nouveau cours », 4 KPI (cours publiés,
+apprenants actifs, certifications, taux de complétion), onglets Tous / En cours / Terminés / Mes
+cours (+ recherche et tri dans l'URL), grille de cartes de cours (visuel `courses.image_url`,
+modules, durée, progression personnelle, bouton Continuer/Commencer/Terminé) et colonne latérale
+(Mon parcours en anneau, verset, cours récents, formateurs). « Mes cours » et « Mon parcours »
+rapprochent l'utilisateur d'une fiche `people` par email (aucun lien direct compte ↔ personne dans
+le schéma) ; sans correspondance ils restent vides. **Écart avec la maquette** : pas de « Parcours
+de formation » ni d'onglet « Parcours » (aucune table correspondante) — le 3ᵉ KPI affiche les
+certifications délivrées ; pas de badge « En vedette ». Aucune migration. Vérifié par
+typecheck/lint uniquement — rendu à contrôler en conditions réelles.
+
+### Formulaire « Nouveau cours »
+
+Refonte selon la maquette : dialogue large en 3 sections (informations générales, détails, paramètres
+et visibilité) avec aperçu en direct et image de couverture (PNG/JPEG/WebP, 2 Mo, bucket public
+`churchos-course-covers`). Nouveaux champs de `courses` : catégorie, niveau, prérequis, date de
+publication, co-formateurs, `allow_enrollment`, `show_in_library`. À la création, « Nombre de
+modules » génère « Module 1 » … « Module N » (durée par module optionnelle, durée du cours = somme) ;
+ces deux champs n'apparaissent pas à la modification (les modules se gèrent dans la fiche du cours).
+**Migrations à appliquer, dans l'ordre** : [`2026-10-03-course-form-fields.sql`](db/migrations/2026-10-03-course-form-fields.sql)
+puis [`2026-10-04-course-categories.sql`](db/migrations/2026-10-04-course-categories.sql) (idempotentes,
+incluses dans `db/schema.sql`).
+
+- **Catégories modifiables** : table `course_categories` (bouton « Catégories » de la bannière :
+  ajout/suppression). Une organisation sans catégorie reçoit les 8 catégories par défaut à la première
+  ouverture ; supprimer une catégorie ne change pas les cours qui la portent (`courses.category` est un texte).
+- **Inscription** : bouton « S'inscrire » (carte de cours et fiche du cours) qui inscrit le membre
+  connecté (`enrollSelf`) ; refusé côté serveur si le cours n'est pas publié ou si « Autoriser
+  l'inscription » est désactivé. Les gestionnaires (`training.enroll`) inscrivent toujours qui ils veulent.
+  Sans fiche `people` ayant le même email que le compte, l'auto-inscription est indisponible.
+- **Bibliothèque** : « Afficher dans la bibliothèque » désactivé = cours masqué aux non-gestionnaires.
+- **Image** : téléversement ou URL http(s) externe ; les modules d'un cours existant se gèrent dans sa fiche
+  (le formulaire de modification en indique le nombre).
+
+Vérifié par typecheck/lint uniquement.
+
+### Page Certifications (`/training/certifications`) et formulaire « Nouvelle certification »
+
+Nouvelle entrée « Certifications » sous Formations (le menu met désormais en surbrillance l'entrée la
+plus spécifique). Page d'après la maquette : bannière (2 Timothée 3:14), 4 KPI (délivrées avec variation
+vs année précédente, membres certifiés, programmes, taux de réussite = obtenues / total), onglets
+Toutes / En cours / Obtenues / Expirées + recherche, tableau paginé (10 par page), répartition par
+programme (anneau), statut (barres) et certifications récentes. Le formulaire (dialogue en 3 sections
+avec aperçu du certificat) sert aussi sur la fiche d'un cours (programme figé). **Migration à appliquer** :
+[`db/migrations/2026-10-05-certification-form-fields.sql`](db/migrations/2026-10-05-certification-form-fields.sql)
+(idempotente, incluse dans `db/schema.sql`) : colonnes `issuer`, `description`, `instructor_person_id`,
+`status`, `visibility`, `file_path` et bucket privé `churchos-certificates` (PDF/PNG/JPG, 5 Mo, envoi direct
+navigateur → Storage, téléchargement par URL signée).
+
+- Statut affiché : « En cours » si enregistré ainsi ; « Expirée » si enregistré ainsi ou si la date d'expiration
+  est passée ; sinon « Obtenue ».
+- Visibilité appliquée côté serveur : les responsables (admin, `training.certify`, `training.manage`) voient
+  tout ; les autres voient les certifications « toute l'église » et les leurs si « visibles par le membre ».
+- « Notifier le membre » crée une notification in-app (`notifications.person_id`) — aucun écran ne les
+  affiche encore, et aucun email/SMS n'est envoyé.
+- Non reproduit de la maquette : le bouton « Filtres » (la recherche et les onglets couvrent le besoin) et le
+  sélecteur de taille de page.
+
+Vérifié par typecheck/lint/build uniquement.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
