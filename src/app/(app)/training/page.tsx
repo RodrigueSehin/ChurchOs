@@ -64,7 +64,7 @@ export default async function TrainingPage({
 
   const [kpis, cards, overview, recent, instructors, people] = await Promise.all([
     getTrainingKpis(organizationId),
-    getCourseCards({ organizationId, personId, search: params.q, view, sort, page }),
+    getCourseCards({ organizationId, personId, search: params.q, view, sort, page, includeHidden: canCreate }),
     personId ? getMyTrainingOverview(organizationId, personId) : Promise.resolve(null),
     getRecentCourses(organizationId, 4),
     getInstructors(organizationId, 4),

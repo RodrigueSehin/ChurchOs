@@ -15,13 +15,62 @@ export const ENROLLMENT_STATUS_LABELS: Record<string, string> = {
   pending: "En attente",
 };
 
+export const COURSE_CATEGORIES = [
+  "Fondements de la foi",
+  "Vie de prière",
+  "Discipolat",
+  "Étude biblique",
+  "Leadership",
+  "Croissance spirituelle",
+  "Vie en communauté",
+  "Autre",
+];
+
+export const COURSE_LEVELS: Record<string, string> = {
+  all: "Tous niveaux",
+  beginner: "Débutant",
+  intermediate: "Intermédiaire",
+  advanced: "Avancé",
+};
+
+export const COURSE_COVER_BUCKET = "churchos-course-covers";
+export const COURSE_COVER_MAX_BYTES = 2 * 1024 * 1024;
+export const COURSE_COVER_MIME_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
+/** Chemin Storage d'une couverture de NOTRE bucket (sinon `null` : URL externe ou absente). */
+export function courseCoverStoragePath(url: string | null | undefined) {
+  const marker = `/object/public/${COURSE_COVER_BUCKET}/`;
+  const i = url?.indexOf(marker) ?? -1;
+  return url && i >= 0 ? decodeURIComponent(url.slice(i + marker.length)) : null;
+}
+
+const checkbox = z
+  .string()
+  .nullish()
+  .transform((v) => v === "on" || v === "true");
+
 export const courseSchema = z.object({
-  title: z.string().min(1, "Titre requis"),
-  description: optionalString,
+  title: z.string().trim().min(1, "Titre requis").max(100, "Titre : 100 caractères maximum"),
+  category: z.string().trim().min(1, "Catégorie requise"),
+  description: z.string().trim().min(1, "Description requise").max(500, "Description : 500 caractères maximum"),
+  instructorPersonId: z.string().min(1, "Formateur principal requis"),
+  prerequisites: optionalString.pipe(z.string().max(300, "Prérequis : 300 caractères maximum")),
+  level: z
+    .string()
+    .nullish()
+    .transform((v) => v || "all")
+    .pipe(z.enum(["all", "beginner", "intermediate", "advanced"])),
   status: z.enum(["draft", "published", "archived"]).default("draft"),
-  instructorPersonId: optionalString,
-  imageUrl: optionalString,
-  durationMinutes: optionalString,
+  publishedAt: optionalString,
+  allowEnrollment: checkbox,
+  showInLibrary: checkbox,
+  // Création uniquement : le formulaire génère « Module 1 » … « Module N » (absents à la modification).
+  moduleCount: optionalString,
+  moduleMinutes: optionalString,
 });
 export type CourseInput = z.infer<typeof courseSchema>;
 

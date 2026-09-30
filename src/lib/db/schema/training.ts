@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   integer,
@@ -29,6 +30,13 @@ export const courses = pgTable("courses", {
   }),
   imageUrl: text("image_url"),
   durationMinutes: integer("duration_minutes"),
+  category: text("category"),
+  level: text("level"),
+  prerequisites: text("prerequisites"),
+  publishedAt: date("published_at"),
+  allowEnrollment: boolean("allow_enrollment").notNull().default(true),
+  showInLibrary: boolean("show_in_library").notNull().default(true),
+  coInstructorIds: uuid("co_instructor_ids").array().notNull().default(sql`'{}'::uuid[]`),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

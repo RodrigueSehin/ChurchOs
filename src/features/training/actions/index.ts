@@ -7,7 +7,11 @@ import { createClient } from "@/lib/supabase/server";
 import {
   certificationSchema,
   courseModuleSchema,
+  courseCoverStoragePath,
   courseSchema,
+  COURSE_COVER_BUCKET,
+  COURSE_COVER_MAX_BYTES,
+  COURSE_COVER_MIME_EXTENSIONS,
   enrollPersonSchema,
 } from "@/features/training/schemas";
 
@@ -27,12 +31,62 @@ function orNumber(value: string) {
 function parseCourseForm(formData: FormData) {
   return courseSchema.safeParse({
     title: formData.get("title"),
+    category: formData.get("category"),
     description: formData.get("description"),
-    status: formData.get("status"),
     instructorPersonId: formData.get("instructorPersonId"),
-    imageUrl: formData.get("imageUrl"),
-    durationMinutes: formData.get("durationMinutes"),
+    prerequisites: formData.get("prerequisites"),
+    level: formData.get("level"),
+    status: formData.get("status"),
+    publishedAt: formData.get("publishedAt"),
+    allowEnrollment: formData.get("allowEnrollment"),
+    showInLibrary: formData.get("showInLibrary"),
+    moduleCount: formData.get("moduleCount"),
+    moduleMinutes: formData.get("moduleMinutes"),
   });
+}
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+function coverFile(formData: FormData) {
+  const file = formData.get("cover");
+  return file instanceof File && file.size > 0 ? file : undefined;
+}
+
+function validateCover(file: File | undefined) {
+  if (!file) return null;
+  if (!COURSE_COVER_MIME_EXTENSIONS[file.type]) return "Image de couverture : PNG, JPEG ou WebP uniquement.";
+  if (file.size > COURSE_COVER_MAX_BYTES) return "Image de couverture trop volumineuse (2 Mo maximum).";
+  return null;
+}
+
+async function uploadCover(supabase: Supabase, organizationId: string, courseId: string, file: File) {
+  const path = `${organizationId}/${courseId}/cover-${crypto.randomUUID()}.${COURSE_COVER_MIME_EXTENSIONS[file.type]}`;
+  const { error } = await supabase.storage.from(COURSE_COVER_BUCKET).upload(path, file, { contentType: file.type });
+  if (error) return { error: `Échec du téléversement de l'image : ${error.message}` };
+  return { url: supabase.storage.from(COURSE_COVER_BUCKET).getPublicUrl(path).data.publicUrl, path };
+}
+
+async function removeCoverFile(supabase: Supabase, url: string | null | undefined) {
+  const path = courseCoverStoragePath(url);
+  if (!path) return;
+  const { error } = await supabase.storage.from(COURSE_COVER_BUCKET).remove([path]);
+  if (error) console.error("training: suppression de l'ancienne couverture impossible", error.message);
+}
+
+function courseColumns(v: ReturnType<typeof courseSchema.parse>, coInstructorIds: string[]) {
+  return {
+    title: v.title,
+    category: v.category,
+    description: v.description,
+    status: v.status,
+    instructor_person_id: v.instructorPersonId,
+    co_instructor_ids: coInstructorIds.filter((id) => id !== v.instructorPersonId),
+    prerequisites: orNull(v.prerequisites),
+    level: v.level,
+    published_at: orNull(v.publishedAt),
+    allow_enrollment: v.allowEnrollment,
+    show_in_library: v.showInLibrary,
+  };
 }
 
 export async function createCourse(_prev: TrainingActionState, formData: FormData): Promise<TrainingActionState> {
@@ -43,17 +97,56 @@ export async function createCourse(_prev: TrainingActionState, formData: FormDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
 
+  const moduleCount = Number(v.moduleCount);
+  if (!Number.isInteger(moduleCount) || moduleCount < 1 || moduleCount > 100) {
+    return { error: "Nombre de modules : entre 1 et 100." };
+  }
+  const moduleMinutes = orNumber(v.moduleMinutes);
+  if (moduleMinutes !== null && (!Number.isInteger(moduleMinutes) || moduleMinutes < 0)) {
+    return { error: "Durée par module invalide (minutes, nombre entier)." };
+  }
+  const cover = coverFile(formData);
+  const coverError = validateCover(cover);
+  if (coverError) return { error: coverError };
+
+  const organizationId = check.organization.organization.id;
   const supabase = await createClient();
-  const { error } = await supabase.from("courses").insert({
-    organization_id: check.organization.organization.id,
-    title: v.title,
-    description: orNull(v.description),
-    status: v.status,
-    instructor_person_id: orNull(v.instructorPersonId),
-    image_url: orNull(v.imageUrl),
-    duration_minutes: orNumber(v.durationMinutes),
-  });
+  const { data: course, error } = await supabase
+    .from("courses")
+    .insert({
+      organization_id: organizationId,
+      ...courseColumns(v, formData.getAll("coInstructorIds").map(String)),
+      duration_minutes: moduleMinutes !== null ? moduleMinutes * moduleCount : null,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
+
+  // Un cours est inutilisable s'il échoue à mi-création : en cas d'erreur sur les modules ou la
+  // couverture, on retire le cours (les modules partent en cascade) pour que l'utilisateur réessaie.
+  const rollback = async (message: string, coverPath?: string) => {
+    if (coverPath) await supabase.storage.from(COURSE_COVER_BUCKET).remove([coverPath]);
+    await supabase.from("courses").delete().eq("id", course.id).eq("organization_id", organizationId);
+    return { error: message };
+  };
+
+  const { error: modulesError } = await supabase.from("course_modules").insert(
+    Array.from({ length: moduleCount }, (_, i) => ({
+      organization_id: organizationId,
+      course_id: course.id,
+      title: `Module ${i + 1}`,
+      sort_order: i + 1,
+      duration_minutes: moduleMinutes,
+    })),
+  );
+  if (modulesError) return rollback(modulesError.message);
+
+  if (cover) {
+    const uploaded = await uploadCover(supabase, organizationId, course.id, cover);
+    if (uploaded.error !== undefined) return rollback(uploaded.error);
+    const { error: coverSaveError } = await supabase.from("courses").update({ image_url: uploaded.url }).eq("id", course.id);
+    if (coverSaveError) return rollback(coverSaveError.message, uploaded.path);
+  }
 
   revalidatePath("/training");
   return { success: true };
@@ -70,21 +163,46 @@ export async function updateCourse(
   const parsed = parseCourseForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
+  const cover = coverFile(formData);
+  const coverError = validateCover(cover);
+  if (coverError) return { error: coverError };
+  const removeCover = formData.get("removeCover") === "on";
 
+  const organizationId = check.organization.organization.id;
   const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("courses")
+    .select("image_url")
+    .eq("id", courseId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (!existing) return { error: "Cours introuvable." };
+
+  let imageUrl: string | null | undefined; // undefined = inchangée
+  let uploadedPath: string | undefined;
+  if (cover) {
+    const uploaded = await uploadCover(supabase, organizationId, courseId, cover);
+    if (uploaded.error !== undefined) return { error: uploaded.error };
+    imageUrl = uploaded.url;
+    uploadedPath = uploaded.path;
+  } else if (removeCover) {
+    imageUrl = null;
+  }
+
   const { error } = await supabase
     .from("courses")
     .update({
-      title: v.title,
-      description: orNull(v.description),
-      status: v.status,
-      instructor_person_id: orNull(v.instructorPersonId),
-      image_url: orNull(v.imageUrl),
-      duration_minutes: orNumber(v.durationMinutes),
+      ...courseColumns(v, formData.getAll("coInstructorIds").map(String)),
+      ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
     })
     .eq("id", courseId)
-    .eq("organization_id", check.organization.organization.id);
-  if (error) return { error: error.message };
+    .eq("organization_id", organizationId);
+  if (error) {
+    if (uploadedPath) await supabase.storage.from(COURSE_COVER_BUCKET).remove([uploadedPath]);
+    return { error: error.message };
+  }
+  if (imageUrl !== undefined) await removeCoverFile(supabase, existing.image_url);
 
   revalidatePath("/training");
   revalidatePath(`/training/${courseId}`);
@@ -100,12 +218,19 @@ export async function deleteCourse(courseId: string): Promise<TrainingActionStat
   }
 
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("courses")
+    .select("image_url")
+    .eq("id", courseId)
+    .eq("organization_id", check.organization.organization.id)
+    .single();
   const { error } = await supabase
     .from("courses")
     .delete()
     .eq("id", courseId)
     .eq("organization_id", check.organization.organization.id);
   if (error) return { error: error.message };
+  await removeCoverFile(supabase, existing?.image_url);
 
   revalidatePath("/training");
   return { success: true };

@@ -149,6 +149,20 @@ de formation » ni d'onglet « Parcours » (aucune table correspondante) — le 
 certifications délivrées ; pas de badge « En vedette ». Aucune migration. Vérifié par
 typecheck/lint uniquement — rendu à contrôler en conditions réelles.
 
+### Formulaire « Nouveau cours »
+
+Refonte selon la maquette : dialogue large en 3 sections (informations générales, détails, paramètres
+et visibilité) avec aperçu en direct et image de couverture (PNG/JPEG/WebP, 2 Mo, bucket public
+`churchos-course-covers`). Nouveaux champs de `courses` : catégorie, niveau, prérequis, date de
+publication, co-formateurs, `allow_enrollment`, `show_in_library`. À la création, « Nombre de
+modules » génère « Module 1 » … « Module N » (durée par module optionnelle, durée du cours = somme) ;
+ces deux champs n'apparaissent pas à la modification (les modules se gèrent dans la fiche du cours).
+**Migration à appliquer** : [`db/migrations/2026-10-03-course-form-fields.sql`](db/migrations/2026-10-03-course-form-fields.sql)
+(idempotente, incluse dans `db/schema.sql`). « Afficher dans la bibliothèque » masque le cours aux
+non-gestionnaires ; « Autoriser l'inscription » est enregistré mais pas encore appliqué (il n'existe
+pas d'auto-inscription : les inscriptions sont faites par un gestionnaire). Vérifié par
+typecheck/lint uniquement.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.

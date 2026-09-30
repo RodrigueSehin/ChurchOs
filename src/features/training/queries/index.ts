@@ -168,9 +168,12 @@ export async function getCourseCards({
   view = "",
   sort = "recent",
   page = 1,
+  includeHidden = false,
 }: {
   organizationId: string;
   personId: string | null;
+  /** Les gestionnaires voient aussi les cours masqués de la bibliothèque (`show_in_library = false`). */
+  includeHidden?: boolean;
   search?: string;
   view?: string;
   sort?: string;
@@ -178,6 +181,7 @@ export async function getCourseCards({
 }) {
   const conditions = [eq(courses.organizationId, organizationId)];
   if (search?.trim()) conditions.push(ilike(courses.title, `%${search.trim()}%`));
+  if (!includeHidden) conditions.push(eq(courses.showInLibrary, true));
 
   const baseRows = await db
     .select({
