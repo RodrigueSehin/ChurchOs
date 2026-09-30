@@ -139,6 +139,7 @@ function parseTransactionForm(formData: FormData) {
     invoiceDate: formData.get("invoiceDate"),
     subcategoryId: formData.get("subcategoryId"),
     campusId: formData.get("campusId"),
+    donorName: formData.get("donorName"),
     status: formData.get("status"),
   });
 }
@@ -196,6 +197,7 @@ export async function createTransaction(_prev: FinanceActionState, formData: For
     ["invoice_date", v.invoiceDate],
     ["subcategory_id", v.subcategoryId],
     ["campus_id", v.campusId],
+    ["donor_name", v.donorName],
   ];
   for (const [column, value] of optional) if (value.trim() !== "") extra[column] = value.trim();
   if (v.status !== "validated") extra.status = v.status;

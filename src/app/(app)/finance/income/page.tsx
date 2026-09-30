@@ -24,7 +24,7 @@ import { DonationsTabs } from "@/features/finance/components/donations-tabs";
 import { DonationsFilters } from "@/features/finance/components/donations-filters";
 import { DonationsMonthlyChart } from "@/features/finance/components/donations-monthly-chart";
 import { DonationsCategoryDonut } from "@/features/finance/components/donations-category-donut";
-import { TransactionFormDialog } from "@/features/finance/components/transaction-form-dialog";
+import { DonationFormDialog } from "@/features/finance/components/donation-form-dialog";
 import { FinanceSetupManager } from "@/features/finance/components/finance-setup-manager";
 
 function n(value: number) {
@@ -95,9 +95,10 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
     to: params.to,
   });
 
+  const topLevelCategories = categories.filter((c) => !c.parentId);
   const hasFilters = Boolean(params.q || params.category || params.fund || params.method || params.from || params.to);
   const newDonation = canCreate ? (
-    <TransactionFormDialog type="income" triggerLabel="Nouveau don" categories={categories} funds={funds} accounts={accounts} people={people} />
+    <DonationFormDialog categories={topLevelCategories} funds={funds} accounts={accounts} people={people} currency={currency} />
   ) : undefined;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
@@ -162,7 +163,7 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <DonationsTabs activeCategoryId={params.category ?? ""} categories={categories.filter((c) => !c.parentId)} counts={tabCounts} />
+          <DonationsTabs activeCategoryId={params.category ?? ""} categories={topLevelCategories} counts={tabCounts} />
           <div className="flex items-center gap-2">
             {canCreate && <FinanceSetupManager categories={categories} funds={funds} accounts={accounts} />}
             {newDonation}

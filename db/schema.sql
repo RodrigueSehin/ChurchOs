@@ -1924,7 +1924,9 @@ alter table public.financial_transactions
   add column if not exists invoice_date date,
   add column if not exists subcategory_id uuid references public.finance_categories(id) on delete set null,
   add column if not exists campus_id uuid references public.campuses(id) on delete set null,
-  add column if not exists status text not null default 'validated';
+  add column if not exists status text not null default 'validated',
+  -- Donateur hors base « people » (formulaire « Nouveau don » : visiteur / autre personne).
+  add column if not exists donor_name text;
 
 do $$
 begin

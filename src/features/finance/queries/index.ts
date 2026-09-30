@@ -77,6 +77,7 @@ export async function getTransactions({
         ilike(financialTransactions.description, term),
         ilike(financialTransactions.title, term),
         ilike(financialTransactions.vendorName, term),
+        ilike(financialTransactions.donorName, term),
         ilike(financialTransactions.reference, term),
       )!,
     );
@@ -97,6 +98,7 @@ export async function getTransactions({
         categoryName: financeCategories.name,
         title: financialTransactions.title,
         vendorName: financialTransactions.vendorName,
+        donorName: financialTransactions.donorName,
         status: financialTransactions.status,
         attachmentCount: sql<number>`(select count(*)::int from ${financialTransactionAttachments} where ${financialTransactionAttachments.transactionId} = ${financialTransactions.id})`,
         fundName: funds.name,

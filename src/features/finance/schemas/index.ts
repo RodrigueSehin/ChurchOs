@@ -85,6 +85,7 @@ export const transactionSchema = z.object({
   invoiceDate: optionalString,
   subcategoryId: optionalString,
   campusId: optionalString,
+  donorName: optionalString,
   status: z.enum(["validated", "pending", "rejected"]).nullish().transform((v) => v ?? "validated"),
 });
 export type TransactionInput = z.infer<typeof transactionSchema>;

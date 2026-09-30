@@ -50,7 +50,7 @@ export function DonationsTable({ rows, canDelete }: { rows: Row[]; canDelete: bo
         </thead>
         <tbody>
           {rows.map((row) => {
-            const donor = row.donorFirstName ? `${row.donorFirstName} ${row.donorLastName ?? ""}`.trim() : null;
+            const donor = row.donorFirstName ? `${row.donorFirstName} ${row.donorLastName ?? ""}`.trim() : (row.donorName ?? null);
             const name = donor ?? row.description ?? "Don anonyme";
             const MethodIcon = row.paymentMethod ? (METHOD_ICONS[row.paymentMethod] ?? Wallet) : null;
             return (

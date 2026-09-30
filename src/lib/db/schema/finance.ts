@@ -114,6 +114,7 @@ export const financialTransactions = pgTable(
     subcategoryId: uuid("subcategory_id").references((): AnyPgColumn => financeCategories.id, { onDelete: "set null" }),
     campusId: uuid("campus_id").references(() => campuses.id, { onDelete: "set null" }),
     status: text("status").notNull().default("validated"),
+    donorName: text("donor_name"),
     createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
