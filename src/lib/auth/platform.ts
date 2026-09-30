@@ -7,11 +7,19 @@ import { platformAdmins } from "@/lib/db/schema";
 import { getCurrentUser, requireUser, type CurrentUser } from "./session";
 
 export async function isPlatformAdmin(userId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ userId: platformAdmins.userId })
-    .from(platformAdmins)
-    .where(eq(platformAdmins.userId, userId));
-  return Boolean(row);
+  try {
+    const [row] = await db
+      .select({ userId: platformAdmins.userId })
+      .from(platformAdmins)
+      .where(eq(platformAdmins.userId, userId));
+    return Boolean(row);
+  } catch (error) {
+    // Table `platform_admins` pas encore appliquée (db/schema.sql) : cette vérification tourne dans
+    // le layout de TOUTES les pages, elle ne doit jamais faire tomber l'application. Échec fermé :
+    // personne n'est administrateur de plateforme tant que la table n'existe pas.
+    console.error("isPlatformAdmin: lecture de platform_admins impossible", error);
+    return false;
+  }
 }
 
 /** Variante sans redirection, pour afficher/masquer un lien (ex. menu latéral). */
