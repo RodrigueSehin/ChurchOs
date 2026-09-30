@@ -73,7 +73,7 @@ Sujets de prière, Visites, Conseil pastoral, Ministères, Ouvriers, Services, C
 
 ### Reste à faire
 
-- **Page de l'utilisateur connecté (`/settings/profile`) : pas encore terminée.**
+- **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
 - Refonte selon les maquettes des modules restants : Finance, Training, Communication, Documents,
   Resources, Analytics, Reports, Settings, AI, Teams.
 - Finir la vérification live des Phases 14 et 15, puis les marquer ✅.
