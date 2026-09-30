@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Image as ImageIcon, Phone } from "lucide-react";
+import { Phone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,6 @@ export interface ProfileFormValues {
   lastName: string;
   email: string;
   phone: string;
-  avatarUrl: string;
   timezone: string;
   currency: string;
 }
@@ -57,11 +56,6 @@ export function ProfileForm({ values }: { values: ProfileFormValues }) {
           <Label htmlFor="phone">Téléphone</Label>
           <IconInput icon={Phone} id="phone" name="phone" type="tel" defaultValue={values.phone} />
         </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="avatarUrl">URL de l&apos;avatar (optionnel)</Label>
-        <IconInput icon={ImageIcon} id="avatarUrl" name="avatarUrl" type="url" defaultValue={values.avatarUrl} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
