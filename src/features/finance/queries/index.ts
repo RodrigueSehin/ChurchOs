@@ -125,9 +125,9 @@ function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-/** 4 cartes KPI de "Dons & offrandes" (recettes uniquement). Mois en cours vs mois précédent ;
+/** 4 cartes KPI de "Dons & offrandes" (recettes) ou "Dépenses". Mois en cours vs mois précédent ;
  * cumul de l'année vs même période de l'année précédente. */
-export async function getDonationsKpis(organizationId: string) {
+export async function getTransactionKpis(organizationId: string, type: "income" | "expense") {
   const now = new Date();
   const y = now.getUTCFullYear();
   const m = now.getUTCMonth();
@@ -154,7 +154,7 @@ export async function getDonationsKpis(organizationId: string) {
       prevYearSum: sql<string>`coalesce(sum(${a}) filter (where ${d} >= ${prevYearStart} and ${d} <= ${prevYearSameDay}), 0)`,
     })
     .from(financialTransactions)
-    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, "income")));
+    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, type)));
 
   const monthSum = Number(row?.monthSum ?? 0);
   const prevMonthSum = Number(row?.prevMonthSum ?? 0);
@@ -165,14 +165,15 @@ export async function getDonationsKpis(organizationId: string) {
 
   return {
     monthTotal: { value: monthSum, deltaPct: pctDelta(monthSum, prevMonthSum) },
+    monthCount: { value: monthCount, deltaPct: pctDelta(monthCount, prevMonthCount) },
     activeDonors: { value: row?.monthDonors ?? 0, deltaPct: pctDelta(row?.monthDonors ?? 0, row?.prevMonthDonors ?? 0) },
     yearTotal: { value: Number(row?.yearSum ?? 0), deltaPct: pctDelta(Number(row?.yearSum ?? 0), Number(row?.prevYearSum ?? 0)) },
     average: { value: Math.round(avgNow), deltaPct: pctDelta(avgNow, avgBefore) },
   };
 }
 
-/** Recettes d'une année, par mois et par catégorie — alimente le graphique "Évolution des dons". */
-export async function getDonationsMonthly(organizationId: string, year: number) {
+/** Opérations d'une année, par mois et par catégorie — alimente le graphique "Évolution des dons". */
+export async function getMonthlyTotals(organizationId: string, type: "income" | "expense", year: number) {
   const rows = await db
     .select({
       month: sql<number>`extract(month from ${financialTransactions.transactionDate})::int`,
@@ -184,7 +185,7 @@ export async function getDonationsMonthly(organizationId: string, year: number) 
     .where(
       and(
         eq(financialTransactions.organizationId, organizationId),
-        eq(financialTransactions.type, "income"),
+        eq(financialTransactions.type, type),
         gte(financialTransactions.transactionDate, `${year}-01-01`),
         lt(financialTransactions.transactionDate, `${year + 1}-01-01`),
       ),
@@ -194,12 +195,12 @@ export async function getDonationsMonthly(organizationId: string, year: number) 
   return rows.map((r) => ({ month: r.month, categoryName: r.categoryName ?? "Sans catégorie", total: Number(r.total ?? 0) }));
 }
 
-/** Nombre de recettes par catégorie (onglets de filtre). */
-export async function getDonationCategoryCounts(organizationId: string) {
+/** Nombre d'opérations par catégorie (onglets de filtre). */
+export async function getCategoryCounts(organizationId: string, type: "income" | "expense") {
   const rows = await db
     .select({ categoryId: financialTransactions.categoryId, value: count() })
     .from(financialTransactions)
-    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, "income")))
+    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, type)))
     .groupBy(financialTransactions.categoryId);
   const byCategory: Record<string, number> = {};
   let all = 0;
@@ -270,4 +271,48 @@ export async function getFinanceReport({
   const totalExpense = rows.filter((r) => r.type === "expense").reduce((sum, r) => sum + Number(r.total ?? 0), 0);
 
   return { rows, totalIncome, totalExpense, net: totalIncome - totalExpense };
+}
+
+/** Dernières opérations (carte « Dépenses récentes »). */
+export async function getRecentTransactions(organizationId: string, type: "income" | "expense", limit = 5) {
+  return db
+    .select({
+      id: financialTransactions.id,
+      amount: financialTransactions.amount,
+      currency: financialTransactions.currency,
+      transactionDate: financialTransactions.transactionDate,
+      description: financialTransactions.description,
+      categoryName: financeCategories.name,
+    })
+    .from(financialTransactions)
+    .leftJoin(financeCategories, eq(financeCategories.id, financialTransactions.categoryId))
+    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, type)))
+    .orderBy(desc(financialTransactions.transactionDate), desc(financialTransactions.createdAt))
+    .limit(limit);
+}
+
+/** Avancement (réalisé / prévu) des plus grosses lignes du budget actif le plus récent. */
+export async function getActiveBudgetProgress(organizationId: string, limit = 3) {
+  const [budget] = await db
+    .select()
+    .from(budgets)
+    .where(and(eq(budgets.organizationId, organizationId), eq(budgets.status, "active")))
+    .orderBy(desc(budgets.fiscalYear), desc(budgets.createdAt))
+    .limit(1);
+  if (!budget) return null;
+
+  const lines = await db
+    .select({
+      id: budgetLines.id,
+      plannedAmount: budgetLines.plannedAmount,
+      actualAmount: budgetLines.actualAmount,
+      categoryName: financeCategories.name,
+    })
+    .from(budgetLines)
+    .leftJoin(financeCategories, eq(financeCategories.id, budgetLines.categoryId))
+    .where(eq(budgetLines.budgetId, budget.id))
+    .orderBy(desc(budgetLines.plannedAmount))
+    .limit(limit);
+
+  return { budget, lines };
 }

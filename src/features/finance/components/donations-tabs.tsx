@@ -8,10 +8,12 @@ export function DonationsTabs({
   activeCategoryId,
   categories,
   counts,
+  allLabel = "Tous",
 }: {
   activeCategoryId: string;
   categories: { id: string; name: string }[];
   counts: { all: number; byCategory: Record<string, number> };
+  allLabel?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -25,7 +27,7 @@ export function DonationsTabs({
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  const tabs = [{ id: "", name: "Tous", count: counts.all }, ...categories.map((c) => ({ id: c.id, name: c.name, count: counts.byCategory[c.id] ?? 0 }))];
+  const tabs = [{ id: "", name: allLabel, count: counts.all }, ...categories.map((c) => ({ id: c.id, name: c.name, count: counts.byCategory[c.id] ?? 0 }))];
 
   return (
     <div className="flex flex-wrap gap-2">

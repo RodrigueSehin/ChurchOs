@@ -8,14 +8,23 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { deleteTransaction } from "@/features/finance/actions";
 
-export function DonationRowActions({ transactionId, label }: { transactionId: string; label: string }) {
+export function DonationRowActions({
+  transactionId,
+  label,
+  type = "income",
+}: {
+  transactionId: string;
+  label: string;
+  type?: "income" | "expense";
+}) {
+  const noun = type === "income" ? "don" : "dépense";
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function handleDelete() {
     startTransition(async () => {
-      const res = await deleteTransaction(transactionId, "income");
+      const res = await deleteTransaction(transactionId, type);
       if (res.error) setError(res.error);
       else window.location.reload();
     });
@@ -41,8 +50,8 @@ export function DonationRowActions({ transactionId, label }: { transactionId: st
         trigger={<span className="hidden" />}
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title="Supprimer ce don ?"
-        description={`Le don « ${label} » sera définitivement supprimé.`}
+        title={`Supprimer ${type === "income" ? "ce don" : "cette dépense"} ?`}
+        description={`${type === "income" ? "Le" : "La"} ${noun} « ${label} » sera définitivement ${type === "income" ? "supprimé" : "supprimée"}.`}
         confirmLabel="Supprimer"
         variant="destructive"
         onConfirm={handleDelete}

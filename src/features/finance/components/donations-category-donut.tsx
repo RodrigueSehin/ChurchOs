@@ -11,16 +11,28 @@ interface Row {
 
 const MAX_SLICES = 4;
 
-export function DonationsCategoryDonut({ rows, currency }: { rows: Row[]; currency: string }) {
+export function DonationsCategoryDonut({
+  rows,
+  currency,
+  colors = DONUT_COLORS,
+  maxSlices = MAX_SLICES,
+  emptyLabel = "Aucun don enregistré sur cette période.",
+}: {
+  rows: Row[];
+  currency: string;
+  colors?: string[];
+  maxSlices?: number;
+  emptyLabel?: string;
+}) {
   const totals = new Map<string, number>();
   for (const r of rows) totals.set(r.categoryName, (totals.get(r.categoryName) ?? 0) + r.total);
   const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]);
   const grand = ranked.reduce((sum, [, v]) => sum + v, 0);
 
-  if (grand === 0) return <p className="py-10 text-center text-sm text-slate-400">Aucun don enregistré sur cette période.</p>;
+  if (grand === 0) return <p className="py-10 text-center text-sm text-slate-400">{emptyLabel}</p>;
 
-  const head = ranked.slice(0, MAX_SLICES);
-  const rest = ranked.slice(MAX_SLICES).reduce((sum, [, v]) => sum + v, 0);
+  const head = ranked.slice(0, maxSlices);
+  const rest = ranked.slice(maxSlices).reduce((sum, [, v]) => sum + v, 0);
   const slices = [...head.map(([name, value]) => ({ name, value })), ...(rest > 0 ? [{ name: "Autres", value: rest }] : [])];
 
   return (
@@ -30,7 +42,7 @@ export function DonationsCategoryDonut({ rows, currency }: { rows: Row[]; curren
           <PieChart>
             <Pie data={slices} dataKey="value" nameKey="name" innerRadius={54} outerRadius={82} paddingAngle={2} stroke="none">
               {slices.map((s, i) => (
-                <Cell key={s.name} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                <Cell key={s.name} fill={colors[i % colors.length]} />
               ))}
             </Pie>
             <Tooltip formatter={(v) => formatMoney(Number(v), currency)} />
@@ -46,7 +58,7 @@ export function DonationsCategoryDonut({ rows, currency }: { rows: Row[]; curren
         {slices.map((s, i) => (
           <div key={s.name} className="flex items-center justify-between gap-3 text-sm">
             <span className="flex min-w-0 items-center gap-2 truncate text-slate-600">
-              <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+              <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
               {s.name}
             </span>
             <span className="flex shrink-0 items-center gap-3">

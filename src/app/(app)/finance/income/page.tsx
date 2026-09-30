@@ -9,9 +9,9 @@ import { NoResultsState } from "@/components/shared/no-results-state";
 import { Pagination } from "@/components/shared/pagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  getDonationCategoryCounts,
-  getDonationsKpis,
-  getDonationsMonthly,
+  getCategoryCounts,
+  getTransactionKpis,
+  getMonthlyTotals,
   getFinanceCategories,
   getFinancialAccounts,
   getFunds,
@@ -74,13 +74,13 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
   const year = Number(params.year) === currentYear - 1 ? currentYear - 1 : currentYear;
 
   const [kpis, monthly, categories, funds, accounts, people, tabCounts] = await Promise.all([
-    getDonationsKpis(organizationId),
-    getDonationsMonthly(organizationId, year),
+    getTransactionKpis(organizationId, "income"),
+    getMonthlyTotals(organizationId, "income", year),
     getFinanceCategories(organizationId, "income"),
     getFunds(organizationId),
     getFinancialAccounts(organizationId),
     canCreate ? getPeopleForSelect(organizationId) : Promise.resolve([]),
-    getDonationCategoryCounts(organizationId),
+    getCategoryCounts(organizationId, "income"),
   ]);
 
   const { rows, total, pageSize } = await getTransactions({

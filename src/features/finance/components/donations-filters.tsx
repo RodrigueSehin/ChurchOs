@@ -16,6 +16,7 @@ export function DonationsFilters({
   initialMethod,
   initialFundId,
   funds,
+  searchPlaceholder = "Rechercher un donateur, une référence...",
 }: {
   initialSearch: string;
   initialFrom: string;
@@ -23,6 +24,7 @@ export function DonationsFilters({
   initialMethod: string;
   initialFundId: string;
   funds: { id: string; name: string }[];
+  searchPlaceholder?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -55,7 +57,7 @@ export function DonationsFilters({
         <span className="text-slate-400">–</span>
         <Input type="date" aria-label="Au" value={initialTo} onChange={(e) => pushParams({ to: e.target.value })} className="w-[150px]" />
       </div>
-      <IconInput icon={Search} value={search} onChange={(e) => handleSearchChange(e.target.value)} placeholder="Rechercher un donateur, une référence..." className="lg:max-w-xs" />
+      <IconInput icon={Search} value={search} onChange={(e) => handleSearchChange(e.target.value)} placeholder={searchPlaceholder} className="lg:max-w-xs" />
       <FormSelect value={initialMethod} onChange={(e) => pushParams({ method: e.target.value })} className="lg:max-w-[180px]">
         <option value="">Méthode : Toutes</option>
         {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
