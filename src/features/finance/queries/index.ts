@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, lte, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, lt, lte, or, sql, sum } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -32,16 +32,53 @@ export async function getFinancialAccounts(organizationId: string) {
     .orderBy(asc(financialAccounts.name));
 }
 
+export interface TransactionsFilters {
+  organizationId: string;
+  type: "income" | "expense" | "transfer";
+  page?: number;
+  search?: string;
+  categoryId?: string;
+  fundId?: string;
+  paymentMethod?: string;
+  from?: string;
+  to?: string;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const PAYMENT_METHODS = ["cash", "bank_transfer", "card", "mobile_money", "check", "online", "other"] as const;
+
 export async function getTransactions({
   organizationId,
   type,
   page = 1,
-}: {
-  organizationId: string;
-  type: "income" | "expense" | "transfer";
-  page?: number;
-}) {
-  const where = and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, type));
+  search,
+  categoryId,
+  fundId,
+  paymentMethod,
+  from,
+  to,
+}: TransactionsFilters) {
+  const conditions = [eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, type)];
+  if (categoryId && UUID_RE.test(categoryId)) conditions.push(eq(financialTransactions.categoryId, categoryId));
+  if (fundId && UUID_RE.test(fundId)) conditions.push(eq(financialTransactions.fundId, fundId));
+  if (paymentMethod && (PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) {
+    conditions.push(eq(financialTransactions.paymentMethod, paymentMethod as (typeof PAYMENT_METHODS)[number]));
+  }
+  if (from && DATE_RE.test(from)) conditions.push(gte(financialTransactions.transactionDate, from));
+  if (to && DATE_RE.test(to)) conditions.push(lte(financialTransactions.transactionDate, to));
+  if (search?.trim()) {
+    const term = `%${search.trim().replace(/[%_\\]/g, "\\$&")}%`;
+    conditions.push(
+      or(
+        ilike(people.firstName, term),
+        ilike(people.lastName, term),
+        ilike(financialTransactions.description, term),
+        ilike(financialTransactions.reference, term),
+      )!,
+    );
+  }
+  const where = and(...conditions);
 
   const [rows, totalRows] = await Promise.all([
     db
@@ -53,6 +90,7 @@ export async function getTransactions({
         description: financialTransactions.description,
         reference: financialTransactions.reference,
         paymentMethod: financialTransactions.paymentMethod,
+        categoryId: financialTransactions.categoryId,
         categoryName: financeCategories.name,
         fundName: funds.name,
         accountName: financialAccounts.name,
@@ -68,10 +106,108 @@ export async function getTransactions({
       .orderBy(desc(financialTransactions.transactionDate), desc(financialTransactions.createdAt))
       .limit(TRANSACTIONS_PAGE_SIZE)
       .offset((page - 1) * TRANSACTIONS_PAGE_SIZE),
-    db.select({ value: count() }).from(financialTransactions).where(where),
+    db
+      .select({ value: count() })
+      .from(financialTransactions)
+      .leftJoin(people, eq(people.id, financialTransactions.donorPersonId))
+      .where(where),
   ]);
 
   return { rows, total: totalRows[0]?.value ?? 0, page, pageSize: TRANSACTIONS_PAGE_SIZE };
+}
+
+function pctDelta(current: number, previous: number): number {
+  if (previous <= 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+function isoDate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+/** 4 cartes KPI de "Dons & offrandes" (recettes uniquement). Mois en cours vs mois précédent ;
+ * cumul de l'année vs même période de l'année précédente. */
+export async function getDonationsKpis(organizationId: string) {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const monthStart = isoDate(new Date(Date.UTC(y, m, 1)));
+  const prevMonthStart = isoDate(new Date(Date.UTC(y, m - 1, 1)));
+  const yearStart = isoDate(new Date(Date.UTC(y, 0, 1)));
+  const prevYearStart = isoDate(new Date(Date.UTC(y - 1, 0, 1)));
+  const today = isoDate(now);
+  const prevYearSameDay = isoDate(new Date(Date.UTC(y - 1, m, now.getUTCDate())));
+
+  const d = financialTransactions.transactionDate;
+  const a = financialTransactions.amount;
+  const donor = financialTransactions.donorPersonId;
+
+  const [row] = await db
+    .select({
+      monthSum: sql<string>`coalesce(sum(${a}) filter (where ${d} >= ${monthStart}), 0)`,
+      monthCount: sql<number>`(count(*) filter (where ${d} >= ${monthStart}))::int`,
+      monthDonors: sql<number>`(count(distinct ${donor}) filter (where ${d} >= ${monthStart}))::int`,
+      prevMonthSum: sql<string>`coalesce(sum(${a}) filter (where ${d} >= ${prevMonthStart} and ${d} < ${monthStart}), 0)`,
+      prevMonthCount: sql<number>`(count(*) filter (where ${d} >= ${prevMonthStart} and ${d} < ${monthStart}))::int`,
+      prevMonthDonors: sql<number>`(count(distinct ${donor}) filter (where ${d} >= ${prevMonthStart} and ${d} < ${monthStart}))::int`,
+      yearSum: sql<string>`coalesce(sum(${a}) filter (where ${d} >= ${yearStart} and ${d} <= ${today}), 0)`,
+      prevYearSum: sql<string>`coalesce(sum(${a}) filter (where ${d} >= ${prevYearStart} and ${d} <= ${prevYearSameDay}), 0)`,
+    })
+    .from(financialTransactions)
+    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, "income")));
+
+  const monthSum = Number(row?.monthSum ?? 0);
+  const prevMonthSum = Number(row?.prevMonthSum ?? 0);
+  const monthCount = row?.monthCount ?? 0;
+  const prevMonthCount = row?.prevMonthCount ?? 0;
+  const avgNow = monthCount > 0 ? monthSum / monthCount : 0;
+  const avgBefore = prevMonthCount > 0 ? prevMonthSum / prevMonthCount : 0;
+
+  return {
+    monthTotal: { value: monthSum, deltaPct: pctDelta(monthSum, prevMonthSum) },
+    activeDonors: { value: row?.monthDonors ?? 0, deltaPct: pctDelta(row?.monthDonors ?? 0, row?.prevMonthDonors ?? 0) },
+    yearTotal: { value: Number(row?.yearSum ?? 0), deltaPct: pctDelta(Number(row?.yearSum ?? 0), Number(row?.prevYearSum ?? 0)) },
+    average: { value: Math.round(avgNow), deltaPct: pctDelta(avgNow, avgBefore) },
+  };
+}
+
+/** Recettes d'une année, par mois et par catégorie — alimente le graphique "Évolution des dons". */
+export async function getDonationsMonthly(organizationId: string, year: number) {
+  const rows = await db
+    .select({
+      month: sql<number>`extract(month from ${financialTransactions.transactionDate})::int`,
+      categoryName: financeCategories.name,
+      total: sum(financialTransactions.amount),
+    })
+    .from(financialTransactions)
+    .leftJoin(financeCategories, eq(financeCategories.id, financialTransactions.categoryId))
+    .where(
+      and(
+        eq(financialTransactions.organizationId, organizationId),
+        eq(financialTransactions.type, "income"),
+        gte(financialTransactions.transactionDate, `${year}-01-01`),
+        lt(financialTransactions.transactionDate, `${year + 1}-01-01`),
+      ),
+    )
+    .groupBy(sql`extract(month from ${financialTransactions.transactionDate})`, financeCategories.name);
+
+  return rows.map((r) => ({ month: r.month, categoryName: r.categoryName ?? "Sans catégorie", total: Number(r.total ?? 0) }));
+}
+
+/** Nombre de recettes par catégorie (onglets de filtre). */
+export async function getDonationCategoryCounts(organizationId: string) {
+  const rows = await db
+    .select({ categoryId: financialTransactions.categoryId, value: count() })
+    .from(financialTransactions)
+    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, "income")))
+    .groupBy(financialTransactions.categoryId);
+  const byCategory: Record<string, number> = {};
+  let all = 0;
+  for (const r of rows) {
+    all += r.value;
+    if (r.categoryId) byCategory[r.categoryId] = r.value;
+  }
+  return { all, byCategory };
 }
 
 export async function getBudgets(organizationId: string) {
