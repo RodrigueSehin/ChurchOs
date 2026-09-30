@@ -80,6 +80,15 @@ l'accès de l'église via `/suspended`). Accès : appliquer la nouvelle table de
 `npm run db:grant-platform-admin -- email@exemple.com`. Écrite et vérifiée par typecheck/lint
 uniquement — à tester en conditions réelles.
 
+### Migration requise : formulaire « Nouvelle dépense »
+
+Les pages Finance lisent de nouvelles colonnes (`title`, `vendor_name`, `status`, ...) et la table
+`financial_transaction_attachments` + le bucket `churchos-finance`. **Appliquer
+[`db/migrations/2026-09-30-expense-form-fields.sql`](db/migrations/2026-09-30-expense-form-fields.sql)
+sur Supabase AVANT de déployer** (idempotent ; déjà inclus dans `db/schema.sql`). Vérifiée sur un
+Postgres 16 local (2 exécutions successives + requêtes de liste/KPI) ; l'upload Storage et
+l'enregistrement via Supabase n'ont pas été testés en conditions réelles.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.

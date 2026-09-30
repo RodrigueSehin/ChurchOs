@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, ilike, lt, lte, or, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, isNotNull, lt, lte, ne, or, sql, sum } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import {
@@ -7,6 +7,7 @@ import {
   budgets,
   financeCategories,
   financialAccounts,
+  financialTransactionAttachments,
   financialTransactions,
   funds,
   people,
@@ -74,6 +75,8 @@ export async function getTransactions({
         ilike(people.firstName, term),
         ilike(people.lastName, term),
         ilike(financialTransactions.description, term),
+        ilike(financialTransactions.title, term),
+        ilike(financialTransactions.vendorName, term),
         ilike(financialTransactions.reference, term),
       )!,
     );
@@ -92,6 +95,10 @@ export async function getTransactions({
         paymentMethod: financialTransactions.paymentMethod,
         categoryId: financialTransactions.categoryId,
         categoryName: financeCategories.name,
+        title: financialTransactions.title,
+        vendorName: financialTransactions.vendorName,
+        status: financialTransactions.status,
+        attachmentCount: sql<number>`(select count(*)::int from ${financialTransactionAttachments} where ${financialTransactionAttachments.transactionId} = ${financialTransactions.id})`,
         fundName: funds.name,
         accountName: financialAccounts.name,
         donorFirstName: people.firstName,
@@ -154,7 +161,7 @@ export async function getTransactionKpis(organizationId: string, type: "income" 
       prevYearSum: sql<string>`coalesce(sum(${a}) filter (where ${d} >= ${prevYearStart} and ${d} <= ${prevYearSameDay}), 0)`,
     })
     .from(financialTransactions)
-    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, type)));
+    .where(and(eq(financialTransactions.organizationId, organizationId), eq(financialTransactions.type, type), ne(financialTransactions.status, "rejected")));
 
   const monthSum = Number(row?.monthSum ?? 0);
   const prevMonthSum = Number(row?.prevMonthSum ?? 0);
@@ -186,6 +193,7 @@ export async function getMonthlyTotals(organizationId: string, type: "income" | 
       and(
         eq(financialTransactions.organizationId, organizationId),
         eq(financialTransactions.type, type),
+        ne(financialTransactions.status, "rejected"),
         gte(financialTransactions.transactionDate, `${year}-01-01`),
         lt(financialTransactions.transactionDate, `${year + 1}-01-01`),
       ),
@@ -260,6 +268,7 @@ export async function getFinanceReport({
     .where(
       and(
         eq(financialTransactions.organizationId, organizationId),
+        ne(financialTransactions.status, "rejected"),
         gte(financialTransactions.transactionDate, from),
         lte(financialTransactions.transactionDate, to),
       ),
@@ -282,6 +291,8 @@ export async function getRecentTransactions(organizationId: string, type: "incom
       currency: financialTransactions.currency,
       transactionDate: financialTransactions.transactionDate,
       description: financialTransactions.description,
+      title: financialTransactions.title,
+      status: financialTransactions.status,
       categoryName: financeCategories.name,
     })
     .from(financialTransactions)
@@ -315,4 +326,15 @@ export async function getActiveBudgetProgress(organizationId: string, limit = 3)
     .limit(limit);
 
   return { budget, lines };
+}
+
+/** Fournisseurs déjà saisis (suggestions du champ « Fournisseur » — texte libre). */
+export async function getVendorNames(organizationId: string) {
+  const rows = await db
+    .selectDistinct({ name: financialTransactions.vendorName })
+    .from(financialTransactions)
+    .where(and(eq(financialTransactions.organizationId, organizationId), isNotNull(financialTransactions.vendorName)))
+    .orderBy(asc(financialTransactions.vendorName))
+    .limit(100);
+  return rows.map((r) => r.name).filter((n): n is string => Boolean(n));
 }

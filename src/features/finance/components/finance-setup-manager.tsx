@@ -75,6 +75,16 @@ function CategorySection({ categories }: { categories: Awaited<ReturnType<typeof
             </option>
           ))}
         </FormSelect>
+        <FormSelect name="parentId" defaultValue="" className="max-w-[170px]" aria-label="Catégorie parente">
+          <option value="">Catégorie principale</option>
+          {categories
+            .filter((c) => !c.parentId)
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                Sous-catégorie de {c.name}
+              </option>
+            ))}
+        </FormSelect>
         <Button type="submit" size="sm" disabled={pending}>
           <Plus className="size-4" />
         </Button>

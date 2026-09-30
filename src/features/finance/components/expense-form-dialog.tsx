@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, FolderOpen, Plus, Save, Wallet } from "lucide-react";
+import { CreditCard, FileText, FolderOpen, Plus, Save, Store, UploadCloud, Wallet, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,15 +10,28 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { FormSelect } from "@/components/shared/form-select";
 import { createTransaction, type FinanceActionState } from "@/features/finance/actions";
-import { PAYMENT_METHOD_LABELS } from "@/features/finance/schemas";
+import {
+  ATTACHMENT_ALLOWED_MIME_TYPES,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_MAX_FILES,
+  PAYMENT_METHOD_LABELS,
+  TRANSACTION_STATUS_LABELS,
+} from "@/features/finance/schemas";
+import { cn } from "@/lib/utils";
 
 const initialState: FinanceActionState = {};
-const DESCRIPTION_MAX = 500;
+const TEXT_MAX = 500;
 
 interface Option {
   id: string;
   name: string;
 }
+interface CategoryOption extends Option {
+  parentId: string | null;
+}
+
+const TEXTAREA_CLASS =
+  "flex w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20";
 
 function SectionHeader({ step, title, subtitle, tone }: { step: number; title: string; subtitle: string; tone: "blue" | "green" | "purple" }) {
   const tones = {
@@ -37,41 +50,97 @@ function SectionHeader({ step, title, subtitle, tone }: { step: number; title: s
   );
 }
 
+function formatSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+  return `${Math.max(1, Math.round(bytes / 1024))} Ko`;
+}
+
 /** Formulaire « Nouvelle dépense » en 3 sections numérotées (maquette
- * `src/img/Formulaire nouvelle dépense ChurchOS.webp`). Seuls les champs réellement persistés par
- * `financial_transactions` sont proposés — pas de fournisseur, sous-catégorie, statut ni pièces
- * jointes tant que le schéma ne les porte pas. */
+ * `src/img/Formulaire nouvelle dépense ChurchOS.webp`). Les champs supplémentaires (libellé,
+ * fournisseur, sous-catégorie, centre de coût, statut, notes, pièces jointes) sont portés par
+ * `db/migrations/2026-09-30-expense-form-fields.sql`. */
 export function ExpenseFormDialog({
   categories,
   funds,
   accounts,
+  campuses,
+  vendors,
   currency,
   triggerLabel = "Nouvelle dépense",
 }: {
-  categories: Option[];
+  categories: CategoryOption[];
   funds: Option[];
   accounts: Option[];
+  campuses: Option[];
+  vendors: string[];
   currency: string;
   triggerLabel?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [categoryId, setCategoryId] = useState("");
   const [description, setDescription] = useState("");
-  const [savedCount, setSavedCount] = useState(0);
+  const [notes, setNotes] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [savedNew, setSavedNew] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const topLevel = categories.filter((c) => !c.parentId);
+  const subcategories = categories.filter((c) => c.parentId === categoryId);
+
+  function syncInput(next: File[]) {
+    const dt = new DataTransfer();
+    for (const f of next) dt.items.add(f);
+    if (fileInputRef.current) fileInputRef.current.files = dt.files;
+    setFiles(next);
+  }
+
+  function addFiles(incoming: FileList | File[]) {
+    setFileError(null);
+    const next = [...files];
+    for (const f of Array.from(incoming)) {
+      if (!ATTACHMENT_ALLOWED_MIME_TYPES.includes(f.type)) {
+        setFileError(`« ${f.name} » : format non accepté (PDF, JPG ou PNG).`);
+        continue;
+      }
+      if (f.size > ATTACHMENT_MAX_BYTES) {
+        setFileError(`« ${f.name} » dépasse 10 Mo.`);
+        continue;
+      }
+      if (next.length >= ATTACHMENT_MAX_FILES) {
+        setFileError(`${ATTACHMENT_MAX_FILES} fichiers maximum.`);
+        break;
+      }
+      next.push(f);
+    }
+    syncInput(next);
+  }
+
+  function resetForm() {
+    formRef.current?.reset();
+    setCategoryId("");
+    setDescription("");
+    setNotes("");
+    syncInput([]);
+    setFileError(null);
+  }
 
   const [state, formAction, pending] = useActionState(async (prev: FinanceActionState, formData: FormData) => {
     const result = await createTransaction(prev, formData);
     if (result.success) {
       if (formData.get("intent") === "new") {
-        formRef.current?.reset();
-        setDescription("");
-        setSavedCount((c) => c + 1);
+        resetForm();
+        setSavedNew(true);
         router.refresh();
       } else {
         setOpen(false);
         window.location.reload();
       }
+    } else {
+      setSavedNew(false);
     }
     return result;
   }, initialState);
@@ -100,18 +169,29 @@ export function ExpenseFormDialog({
 
           <section className="flex flex-col gap-4">
             <SectionHeader step={1} title="Informations générales" subtitle="Renseignez les informations principales de la dépense." tone="blue" />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="exp-date">Date de la dépense *</Label>
                 <Input id="exp-date" name="transactionDate" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="exp-category">Catégorie *</Label>
-                <FormSelect id="exp-category" name="categoryId" defaultValue="" required>
+                <FormSelect id="exp-category" name="categoryId" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>
                   <option value="" disabled>
                     Sélectionner une catégorie
                   </option>
-                  {categories.map((c) => (
+                  {topLevel.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </FormSelect>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exp-subcategory">Sous-catégorie</Label>
+                <FormSelect id="exp-subcategory" name="subcategoryId" defaultValue="" disabled={subcategories.length === 0} key={categoryId}>
+                  <option value="">{subcategories.length === 0 ? "Aucune" : "—"}</option>
+                  {subcategories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
@@ -119,20 +199,26 @@ export function ExpenseFormDialog({
                 </FormSelect>
               </div>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="exp-description">Libellé *</Label>
-              <Input
-                id="exp-description"
-                name="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                maxLength={DESCRIPTION_MAX}
-                placeholder="Ex. : Réparation climatisation temple"
-                required
-              />
-              <p className="text-right text-xs text-slate-400">
-                {description.length}/{DESCRIPTION_MAX}
-              </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exp-title">Libellé *</Label>
+                <Input id="exp-title" name="title" maxLength={150} placeholder="Ex. : Réparation climatisation temple" required />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exp-description">Description</Label>
+                <textarea
+                  id="exp-description"
+                  name="description"
+                  rows={2}
+                  maxLength={TEXT_MAX}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className={TEXTAREA_CLASS}
+                />
+                <p className="text-right text-xs text-slate-400">
+                  {description.length}/{TEXT_MAX}
+                </p>
+              </div>
             </div>
           </section>
 
@@ -171,29 +257,149 @@ export function ExpenseFormDialog({
                 </FormSelect>
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 sm:max-w-[50%]">
-              <Label htmlFor="exp-reference" className="flex items-center gap-1.5">
-                <CreditCard className="size-3.5 text-slate-400" />N° de facture / Référence
-              </Label>
-              <Input id="exp-reference" name="reference" placeholder="Ex. : FAC-2026-0785" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exp-vendor" className="flex items-center gap-1.5">
+                  <Store className="size-3.5 text-slate-400" />
+                  Fournisseur
+                </Label>
+                <Input id="exp-vendor" name="vendorName" list="exp-vendors" maxLength={120} placeholder="Nom du fournisseur" autoComplete="off" />
+                <datalist id="exp-vendors">
+                  {vendors.map((v) => (
+                    <option key={v} value={v} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exp-reference" className="flex items-center gap-1.5">
+                  <CreditCard className="size-3.5 text-slate-400" />N° de facture / Référence
+                </Label>
+                <Input id="exp-reference" name="reference" maxLength={80} placeholder="Ex. : FAC-2026-0785" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exp-invoice-date">Date de facture</Label>
+                <Input id="exp-invoice-date" name="invoiceDate" type="date" />
+              </div>
             </div>
           </section>
 
           <section className="flex flex-col gap-4">
-            <SectionHeader step={3} title="Affectation" subtitle="Précisez le fonds auquel la dépense est rattachée." tone="purple" />
-            <div className="flex flex-col gap-1.5 sm:max-w-[50%]">
-              <Label htmlFor="exp-fund" className="flex items-center gap-1.5">
-                <FolderOpen className="size-3.5 text-slate-400" />
-                Fonds / Projet
-              </Label>
-              <FormSelect id="exp-fund" name="fundId" defaultValue="">
-                <option value="">—</option>
-                {funds.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
+            <SectionHeader step={3} title="Affectation et pièces jointes" subtitle="Précisez l'affectation et ajoutez les justificatifs." tone="purple" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exp-fund" className="flex items-center gap-1.5">
+                  <FolderOpen className="size-3.5 text-slate-400" />
+                  Affectation / Projet
+                </Label>
+                <FormSelect id="exp-fund" name="fundId" defaultValue="">
+                  <option value="">—</option>
+                  {funds.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </FormSelect>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="exp-campus">Centre de coût (optionnel)</Label>
+                <FormSelect id="exp-campus" name="campusId" defaultValue="">
+                  <option value="">—</option>
+                  {campuses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </FormSelect>
+              </div>
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="text-sm font-medium leading-none text-slate-700">Statut</legend>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {Object.entries(TRANSACTION_STATUS_LABELS).map(([value, label]) => (
+                    <label
+                      key={value}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-600 has-[:checked]:border-primary has-[:checked]:bg-blue-50 has-[:checked]:text-primary"
+                    >
+                      <input type="radio" name="status" value={value} defaultChecked={value === "validated"} className="accent-primary" />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                addFiles(e.dataTransfer.files);
+              }}
+              className={cn("grid gap-4 sm:grid-cols-2", "items-stretch")}
+            >
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 py-5 text-center transition-colors",
+                  dragging ? "border-primary bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-primary/50",
+                )}
+              >
+                <UploadCloud className="size-7 text-primary" />
+                <span className="text-sm font-semibold text-navy">Glissez-déposez vos fichiers ici</span>
+                <span className="text-xs text-primary">ou cliquez pour sélectionner</span>
+                <span className="text-xs text-slate-400">PDF, JPG, PNG — 10 Mo max par fichier, {ATTACHMENT_MAX_FILES} fichiers max</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                name="attachments"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/png,image/jpeg"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files) addFiles(e.target.files);
+                }}
+              />
+              <ul className="flex flex-col gap-2">
+                {files.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                    <FileText className={cn("size-5 shrink-0", f.type === "application/pdf" ? "text-red-500" : "text-green-600")} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-navy">{f.name}</p>
+                      <p className="text-xs text-slate-400">{formatSize(f.size)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`Retirer ${f.name}`}
+                      onClick={() => syncInput(files.filter((_, j) => j !== i))}
+                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </li>
                 ))}
-              </FormSelect>
+              </ul>
+            </div>
+            {fileError && <p className="text-xs text-danger">{fileError}</p>}
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="exp-notes">Notes internes (optionnel)</Label>
+              <textarea
+                id="exp-notes"
+                name="notes"
+                rows={2}
+                maxLength={TEXT_MAX}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className={TEXTAREA_CLASS}
+              />
+              <p className="text-right text-xs text-slate-400">
+                {notes.length}/{TEXT_MAX}
+              </p>
             </div>
           </section>
 
@@ -202,7 +408,7 @@ export function ExpenseFormDialog({
               {state.error}
             </p>
           )}
-          {savedCount > 0 && state.success && <p className="text-sm text-success">Dépense enregistrée. Vous pouvez en saisir une autre.</p>}
+          {savedNew && state.success && <p className="text-sm text-success">Dépense enregistrée. Vous pouvez en saisir une autre.</p>}
 
           <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

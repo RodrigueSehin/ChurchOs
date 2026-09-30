@@ -18,7 +18,9 @@ import {
   getRecentTransactions,
   getTransactionKpis,
   getTransactions,
+  getVendorNames,
 } from "@/features/finance/queries";
+import { getCampuses } from "@/features/organizations/queries";
 import { formatMoney } from "@/features/finance/format";
 import { ExpensesTable } from "@/features/finance/components/expenses-table";
 import { DonationsTabs } from "@/features/finance/components/donations-tabs";
@@ -74,11 +76,12 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   const currency = check.organization.organization.currency;
   const canCreate = check.context.permissions.has("finance.create") || check.context.isAdmin;
   const canDelete = check.context.isAdmin;
+  const canApprove = check.context.isAdmin || check.context.permissions.has("finance.approve");
 
   const currentYear = new Date().getUTCFullYear();
   const year = Number(params.year) === currentYear - 1 ? currentYear - 1 : currentYear;
 
-  const [kpis, monthly, categories, funds, accounts, tabCounts, recent, budgetProgress] = await Promise.all([
+  const [kpis, monthly, categories, funds, accounts, tabCounts, recent, budgetProgress, campuses, vendors] = await Promise.all([
     getTransactionKpis(organizationId, "expense"),
     getMonthlyTotals(organizationId, "expense", year),
     getFinanceCategories(organizationId, "expense"),
@@ -87,7 +90,10 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     getCategoryCounts(organizationId, "expense"),
     getRecentTransactions(organizationId, "expense", 5),
     getActiveBudgetProgress(organizationId),
+    getCampuses(organizationId),
+    getVendorNames(organizationId),
   ]);
+  const topLevelCategories = categories.filter((c) => !c.parentId);
 
   const { rows, total, pageSize } = await getTransactions({
     organizationId,
@@ -103,7 +109,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
 
   const hasFilters = Boolean(params.q || params.category || params.fund || params.method || params.from || params.to);
   const newExpense = canCreate ? (
-    <ExpenseFormDialog categories={categories} funds={funds} accounts={accounts} currency={currency} />
+    <ExpenseFormDialog categories={categories} funds={funds} accounts={accounts} campuses={campuses} vendors={vendors} currency={currency} />
   ) : undefined;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
@@ -187,7 +193,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <DonationsTabs activeCategoryId={params.category ?? ""} categories={categories} counts={tabCounts} allLabel="Toutes" />
+            <DonationsTabs activeCategoryId={params.category ?? ""} categories={topLevelCategories} counts={tabCounts} allLabel="Toutes" />
             <div className="flex items-center gap-2">
               {canCreate && <FinanceSetupManager categories={categories} funds={funds} accounts={accounts} />}
               {newExpense}
@@ -213,7 +219,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
               )
             ) : (
               <>
-                <ExpensesTable rows={rows} canDelete={canDelete} />
+                <ExpensesTable rows={rows} canDelete={canDelete} canApprove={canApprove} />
                 <Pagination
                   page={page}
                   pageSize={pageSize}

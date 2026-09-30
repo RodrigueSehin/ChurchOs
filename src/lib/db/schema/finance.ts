@@ -3,6 +3,7 @@ import {
   boolean,
   char,
   check,
+  bigint,
   date,
   integer,
   numeric,
@@ -15,7 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { authUsers } from "./auth-ref";
-import { organizations } from "./identity-org";
+import { campuses, organizations } from "./identity-org";
 import { people } from "./people";
 import { events } from "./events";
 import { financeEntryType, paymentMethod } from "./enums";
@@ -105,12 +106,39 @@ export const financialTransactions = pgTable(
     paymentMethod: paymentMethod("payment_method"),
     donorPersonId: uuid("donor_person_id").references(() => people.id, { onDelete: "set null" }),
     eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
+    // Formulaire « Nouvelle dépense » (db/migrations/2026-09-30-expense-form-fields.sql)
+    title: text("title"),
+    notes: text("notes"),
+    vendorName: text("vendor_name"),
+    invoiceDate: date("invoice_date"),
+    subcategoryId: uuid("subcategory_id").references((): AnyPgColumn => financeCategories.id, { onDelete: "set null" }),
+    campusId: uuid("campus_id").references(() => campuses.id, { onDelete: "set null" }),
+    status: text("status").notNull().default("validated"),
     createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [check("financial_transactions_amount_check", sql`${table.amount} > 0`)],
+  (table) => [
+    check("financial_transactions_amount_check", sql`${table.amount} > 0`),
+    check("financial_transactions_status_check", sql`${table.status} in ('validated','pending','rejected')`),
+  ],
 );
+
+export const financialTransactionAttachments = pgTable("financial_transaction_attachments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  transactionId: uuid("transaction_id")
+    .notNull()
+    .references(() => financialTransactions.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  storagePath: text("storage_path").notNull(),
+  mimeType: text("mime_type"),
+  sizeBytes: bigint("size_bytes", { mode: "number" }),
+  createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const budgets = pgTable(
   "budgets",

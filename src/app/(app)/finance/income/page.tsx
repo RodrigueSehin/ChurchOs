@@ -162,7 +162,7 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <DonationsTabs activeCategoryId={params.category ?? ""} categories={categories} counts={tabCounts} />
+          <DonationsTabs activeCategoryId={params.category ?? ""} categories={categories.filter((c) => !c.parentId)} counts={tabCounts} />
           <div className="flex items-center gap-2">
             {canCreate && <FinanceSetupManager categories={categories} funds={funds} accounts={accounts} />}
             {newDonation}
