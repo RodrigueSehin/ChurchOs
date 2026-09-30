@@ -1,8 +1,11 @@
 "use server";
 
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { db } from "@/lib/db/client";
+import { budgets } from "@/lib/db/schema";
 import { createClient } from "@/lib/supabase/server";
 import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
@@ -139,6 +142,7 @@ function parseTransactionForm(formData: FormData) {
     invoiceDate: formData.get("invoiceDate"),
     subcategoryId: formData.get("subcategoryId"),
     campusId: formData.get("campusId"),
+    donorName: formData.get("donorName"),
     status: formData.get("status"),
   });
 }
@@ -196,6 +200,7 @@ export async function createTransaction(_prev: FinanceActionState, formData: For
     ["invoice_date", v.invoiceDate],
     ["subcategory_id", v.subcategoryId],
     ["campus_id", v.campusId],
+    ["donor_name", v.donorName],
   ];
   for (const [column, value] of optional) if (value.trim() !== "") extra[column] = value.trim();
   if (v.status !== "validated") extra.status = v.status;
@@ -334,26 +339,77 @@ export async function createBudget(_prev: FinanceActionState, formData: FormData
     fiscalYear: formData.get("fiscalYear"),
     startsOn: formData.get("startsOn"),
     endsOn: formData.get("endsOn"),
+    categoryId: formData.get("categoryId"),
+    fundId: formData.get("fundId"),
+    plannedAmount: formData.get("plannedAmount"),
+    description: formData.get("description"),
+    notes: formData.get("notes"),
+    managerPersonId: formData.get("managerPersonId"),
+    campusId: formData.get("campusId"),
+    ministryId: formData.get("ministryId"),
+    status: formData.get("status"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
   if (v.endsOn < v.startsOn) return { error: "La date de fin doit être après la date de début." };
 
+  // Créer directement un budget « actif » revient à l'approuver : même permission que `approveBudget`.
+  if (v.status === "active" && !check.context.isAdmin && !check.context.permissions.has("finance.approve")) {
+    return { error: "Seul un approbateur peut créer un budget actif — enregistrez-le en brouillon." };
+  }
+
+  const plannedAmount = v.plannedAmount.trim() === "" ? null : Number(v.plannedAmount);
+  if (plannedAmount !== null && (!Number.isFinite(plannedAmount) || plannedAmount < 0)) {
+    return { error: "Le montant doit être un nombre positif." };
+  }
+
+  const organizationId = check.organization.organization.id;
+  const budgetId = crypto.randomUUID();
+  const extra: Record<string, string> = {};
+  const optional: [string, string][] = [
+    ["description", v.description],
+    ["notes", v.notes],
+    ["manager_person_id", v.managerPersonId],
+    ["campus_id", v.campusId],
+    ["ministry_id", v.ministryId],
+  ];
+  for (const [column, value] of optional) if (value.trim() !== "") extra[column] = value.trim();
+
   const supabase = await createClient();
   const { error } = await supabase.from("budgets").insert({
-    organization_id: check.organization.organization.id,
+    id: budgetId,
+    organization_id: organizationId,
     name: v.name,
     fiscal_year: Number(v.fiscalYear),
     starts_on: v.startsOn,
     ends_on: v.endsOn,
-    status: "draft",
+    status: v.status,
     created_by: check.user.id,
+    ...extra,
   });
   if (error) {
     if (error.message.includes("duplicate") || error.message.includes("unique")) {
       return { error: "Un budget avec ce nom pour cet exercice existe déjà." };
     }
     return { error: error.message };
+  }
+
+  // Première ligne budgétaire (catégorie + fonds + montant). Si elle échoue, le budget vide est
+  // retiré pour ne pas laisser un budget à moitié créé.
+  if (plannedAmount !== null && plannedAmount > 0) {
+    const { error: lineError } = await supabase.from("budget_lines").insert({
+      organization_id: organizationId,
+      budget_id: budgetId,
+      category_id: orNull(v.categoryId),
+      fund_id: orNull(v.fundId),
+      planned_amount: plannedAmount,
+    });
+    if (lineError) {
+      // Drizzle : la policy RLS de suppression d'un budget est réservée aux admins, or le créateur
+      // peut ne pas l'être — le rollback de SA propre ligne ne doit pas dépendre de ce droit.
+      await db.delete(budgets).where(and(eq(budgets.id, budgetId), eq(budgets.organizationId, organizationId)));
+      return { error: lineError.message };
+    }
   }
 
   revalidatePath("/finance/budgets");

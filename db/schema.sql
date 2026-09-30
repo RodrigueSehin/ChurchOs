@@ -1924,7 +1924,9 @@ alter table public.financial_transactions
   add column if not exists invoice_date date,
   add column if not exists subcategory_id uuid references public.finance_categories(id) on delete set null,
   add column if not exists campus_id uuid references public.campuses(id) on delete set null,
-  add column if not exists status text not null default 'validated';
+  add column if not exists status text not null default 'validated',
+  -- Donateur hors base « people » (formulaire « Nouveau don » : visiteur / autre personne).
+  add column if not exists donor_name text;
 
 do $$
 begin
@@ -2004,6 +2006,22 @@ for delete using (
   bucket_id = 'churchos-finance'
   and public.is_org_admin((storage.foldername(name))[1]::uuid)
 );
+
+-- =========================================================
+-- Formulaire « Nouveau budget » enrichi (maquette "Formulaire nouveau budget")
+-- =========================================================
+-- Idempotent. À appliquer sur Supabase avant d'utiliser le nouveau formulaire (le code n'envoie
+-- ces colonnes que lorsqu'elles sont renseignées). Le même bloc figure à la fin de db/schema.sql.
+alter table public.budgets
+  add column if not exists description text,
+  add column if not exists notes text,
+  add column if not exists manager_person_id uuid references public.people(id) on delete set null,
+  add column if not exists campus_id uuid references public.campuses(id) on delete set null;
+
+-- Rattache un budget à un ministère (champ « Ministère / Projet » de la maquette du formulaire
+-- « Nouveau budget »). Idempotent ; inclus aussi à la fin de db/schema.sql.
+alter table public.budgets
+  add column if not exists ministry_id uuid references public.ministries(id) on delete set null;
 
 -- =========================================================
 -- END

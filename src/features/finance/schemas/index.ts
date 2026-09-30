@@ -85,6 +85,7 @@ export const transactionSchema = z.object({
   invoiceDate: optionalString,
   subcategoryId: optionalString,
   campusId: optionalString,
+  donorName: optionalString,
   status: z.enum(["validated", "pending", "rejected"]).nullish().transform((v) => v ?? "validated"),
 });
 export type TransactionInput = z.infer<typeof transactionSchema>;
@@ -94,6 +95,16 @@ export const budgetSchema = z.object({
   fiscalYear: z.string().regex(/^\d{4}$/, "Année requise"),
   startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date de début requise"),
   endsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date de fin requise"),
+  // Formulaire « Nouveau budget » : première ligne budgétaire + champs descriptifs.
+  categoryId: optionalString,
+  fundId: optionalString,
+  plannedAmount: optionalString,
+  description: optionalString,
+  notes: optionalString,
+  managerPersonId: optionalString,
+  campusId: optionalString,
+  ministryId: optionalString,
+  status: z.enum(["draft", "active"]).nullish().transform((v) => v ?? "draft"),
 });
 export type BudgetInput = z.infer<typeof budgetSchema>;
 

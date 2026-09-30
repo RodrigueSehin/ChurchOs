@@ -19,6 +19,7 @@ import { authUsers } from "./auth-ref";
 import { campuses, organizations } from "./identity-org";
 import { people } from "./people";
 import { events } from "./events";
+import { ministries } from "./ministries";
 import { financeEntryType, paymentMethod } from "./enums";
 
 export const financeCategories = pgTable(
@@ -114,6 +115,7 @@ export const financialTransactions = pgTable(
     subcategoryId: uuid("subcategory_id").references((): AnyPgColumn => financeCategories.id, { onDelete: "set null" }),
     campusId: uuid("campus_id").references(() => campuses.id, { onDelete: "set null" }),
     status: text("status").notNull().default("validated"),
+    donorName: text("donor_name"),
     createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -152,6 +154,12 @@ export const budgets = pgTable(
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
     status: text("status").notNull().default("draft"),
+    // Formulaire « Nouveau budget » (db/migrations/2026-09-30-budget-form-fields.sql)
+    description: text("description"),
+    notes: text("notes"),
+    managerPersonId: uuid("manager_person_id").references(() => people.id, { onDelete: "set null" }),
+    campusId: uuid("campus_id").references(() => campuses.id, { onDelete: "set null" }),
+    ministryId: uuid("ministry_id").references(() => ministries.id, { onDelete: "set null" }),
     createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

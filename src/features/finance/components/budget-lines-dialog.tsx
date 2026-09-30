@@ -31,7 +31,12 @@ export function BudgetLinesDialog({
   categories,
   funds,
   canManage,
+  open: controlledOpen,
+  onOpenChange,
 }: {
+  /** Mode contrôlé (ouverture depuis un menu) : pas de bouton déclencheur interne. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   budgetId: string;
   budgetName: string;
   lines: Line[];
@@ -39,7 +44,10 @@ export function BudgetLinesDialog({
   funds: { id: string; name: string }[];
   canManage: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : internalOpen;
+  const setOpen = controlled ? (onOpenChange ?? (() => {})) : setInternalOpen;
   const boundAdd = addBudgetLine.bind(null, budgetId);
   const [state, formAction, pending] = useActionState(boundAdd, initialState);
 
@@ -48,10 +56,12 @@ export function BudgetLinesDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
-        <ListChecks className="size-4" />
-        Lignes ({lines.length})
-      </Button>
+      {!controlled && (
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
+          <ListChecks className="size-4" />
+          Lignes ({lines.length})
+        </Button>
+      )}
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Lignes budgétaires — {budgetName}</DialogTitle>
