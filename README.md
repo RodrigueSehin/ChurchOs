@@ -136,6 +136,19 @@ initiales s'affichent. Migration : [`db/migrations/2026-10-01-user-avatars.sql`]
   migration. Un `error.tsx` global à `(app)` affiche un message au lieu de la page d'erreur
   générique. Vérifié par typecheck/lint uniquement — à tester en conditions réelles.
 
+### Refonte /training (Cours & Discipolat)
+
+Selon la maquette : bannière (Matthieu 28:19) avec « Nouveau cours », 4 KPI (cours publiés,
+apprenants actifs, certifications, taux de complétion), onglets Tous / En cours / Terminés / Mes
+cours (+ recherche et tri dans l'URL), grille de cartes de cours (visuel `courses.image_url`,
+modules, durée, progression personnelle, bouton Continuer/Commencer/Terminé) et colonne latérale
+(Mon parcours en anneau, verset, cours récents, formateurs). « Mes cours » et « Mon parcours »
+rapprochent l'utilisateur d'une fiche `people` par email (aucun lien direct compte ↔ personne dans
+le schéma) ; sans correspondance ils restent vides. **Écart avec la maquette** : pas de « Parcours
+de formation » ni d'onglet « Parcours » (aucune table correspondante) — le 3ᵉ KPI affiche les
+certifications délivrées ; pas de badge « En vedette ». Aucune migration. Vérifié par
+typecheck/lint uniquement — rendu à contrôler en conditions réelles.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.

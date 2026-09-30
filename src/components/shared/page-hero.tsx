@@ -14,6 +14,8 @@ interface PageHeroProps {
   quote: string;
   verseRef: string;
   cta?: PageHeroCta;
+  /** Boutons d'action (ex. « Nouveau cours »), alignés en bas à droite de la bannière. */
+  actions?: React.ReactNode;
 }
 
 /**
@@ -23,7 +25,7 @@ interface PageHeroProps {
  * différentes captures `Entête_*.png` : structure identique (titre/description/verset/CTA
  * optionnel), seul le contenu change par page.
  */
-export function PageHero({ title, description, quote, verseRef, cta: Cta }: PageHeroProps) {
+export function PageHero({ title, description, quote, verseRef, cta: Cta, actions }: PageHeroProps) {
   return (
     <div className="relative isolate overflow-hidden rounded-2xl">
       <Image src={churchImage} alt="" fill priority className="-z-10 object-cover object-right" sizes="100vw" />
@@ -43,6 +45,8 @@ export function PageHero({ title, description, quote, verseRef, cta: Cta }: Page
             <p className="mt-1 text-sm text-navy/50">{verseRef}</p>
           </div>
         </div>
+
+        {actions && <div className="self-end">{actions}</div>}
 
         {Cta && (
           <div className="self-end rounded-xl bg-navy/85 px-4 py-3 text-white backdrop-blur-sm">
