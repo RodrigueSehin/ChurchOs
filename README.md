@@ -297,10 +297,31 @@ les tables `messages` et `notifications` existantes (une ligne `notifications` p
   `Authorization: Bearer $CRON_SECRET` (variable `CRON_SECRET` à définir) toutes les ~5 minutes (Vercel Cron ou autre) ; sans
   cela, un message planifié reste en attente (« Envoyer maintenant » le déclenche à la main). L'envoi est protégé contre le double envoi.
 - Le taux de délivrance compte les envois acceptés par le fournisseur (pas de webhook de remise).
-- **Médias** : galerie en lecture seule des images, vidéos et documents joints aux annonces (filtre par type).
 - Écarts avec la maquette : pas de bouton « Filtres » séparé ; pas de pagination par taille de page.
 
 Vérifié par typecheck/lint/build uniquement — jamais essayé avec de vrais comptes Twilio / Resend.
+
+### Médias (`/communication/media`)
+
+D'après la maquette : 4 KPI (photos, vidéos, audios, documents, avec variation vs mois dernier) + stockage utilisé
+(sur 10 Go, constante `MEDIA_STORAGE_QUOTA_BYTES`), onglets Tous / Photos / Vidéos / Audios / Documents + recherche
+(titre, tags), grille de 12 médias paginée et panneau de détail (aperçu, téléchargement, partage = copie du lien,
+suppression, informations, tags modifiables, titre modifiable).
+
+- **Vidéos = celles de la chaîne YouTube de l'église** (aucun téléversement de vidéo). Un administrateur clique sur « Relier YouTube »
+  et colle l'URL de la chaîne (`youtube.com/@nom`, `/channel/UC…` ou `/c/nom`) ; elle est stockée dans
+  `media_youtube_channels`. Les 150 dernières vidéos publiques sont lues via l'API YouTube Data v3 (playlist « uploads », durée et vues
+  comprises), mises en cache 15 min, et lues dans un lecteur intégré (`youtube-nocookie`). Variable à ajouter : **`YOUTUBE_API_KEY`**
+  (clé API « YouTube Data API v3 » créée dans Google Cloud ; aucune authentification OAuth requise, la chaîne doit être publique).
+  Le compteur « Vidéos » utilise le total de la chaîne.
+- **Photos, audios (MP3 / M4A / WAV / OGG) et documents (PDF / DOCX)** : « Ajouter un média » (jusqu'à 20 fichiers, 100 Mo chacun, envoi direct navigateur → bucket public
+  `churchos-media`). Les images et documents joints aux annonces apparaissent aussi (lecture seule) ; les vidéos d'annonce ne sont pas listées.
+- Droits : `communication.view` pour consulter, `communication.manage` pour ajouter / modifier / supprimer, administrateur pour relier la chaîne.
+- **Migration à appliquer** : [`db/migrations/2026-10-10-media-library.sql`](db/migrations/2026-10-10-media-library.sql) (idempotente, incluse dans
+  `db/schema.sql` et `2026-10-all-migrations.sql`) : tables `media_items`, `media_youtube_channels`, bucket `churchos-media`.
+- Écarts avec la maquette : pas d'onglet **Albums** ni d'action **Déplacer** (aucun modèle d'album), pas de « Ajouté par », pas de bouton « Filtres », pas de durée des audios ni de forme d'onde.
+
+Vérifié par typecheck/lint/build uniquement — jamais essayé avec une vraie clé YouTube ni un vrai bucket.
 
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
@@ -318,9 +339,10 @@ formulaire d'annonce (seuls Facebook, Instagram et le partage WhatsApp restent).
 
 | Quoi | Où | Pour |
 | --- | --- | --- |
-| `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces (3 au 9 oct.) |
+| `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces, médias (3 au 10 oct.) |
 | `db/migrations/2026-10-07-library-pdf-docx.sql` | SQL Editor Supabase | Seulement si `2026-10-06-library.sql` avait été exécutée avant la restriction PDF/DOCX |
 | `SOCIAL_TOKEN_KEY` (`openssl rand -base64 32`) | Variables Vercel | Connecter Facebook / Instagram (Paramètres > Réseaux sociaux) |
+| `YOUTUBE_API_KEY` + migration `2026-10-10-media-library.sql` | Variables Vercel / SQL Editor | Page Médias (vidéos de la chaîne YouTube, téléversements) |
 | `TWILIO_*`, `CRON_SECRET` + appel périodique de `/api/cron/send-messages` | Variables Vercel / planificateur | Envoi de SMS et messages planifiés |
 
 Migrations plus anciennes (mai–sept.) : `db/migrations/*.sql` par ordre de date, toutes incluses dans
