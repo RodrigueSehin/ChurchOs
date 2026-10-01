@@ -323,6 +323,28 @@ suppression, informations, tags modifiables, titre modifiable).
 
 Vérifié par typecheck/lint/build uniquement — jamais essayé avec une vraie clé YouTube ni un vrai bucket.
 
+### Salles & équipements (`/resources`)
+
+Refonte d'après la maquette : bannière (1 Corinthiens 14:40, contexte de verset `resources`), 4 KPI (salles et équipements avec
+le nombre ajouté ce mois, réservations ce mois avec variation %, taux d'occupation avec variation en points), onglets
+**Salles / Équipements / Réservations / Calendrier** (+ recherche dans l'URL), bouton bleu à menu **Nouvelle salle / Nouvel équipement**.
+
+- **Salles** : tableau paginé (nom, capacité, type en pastille, localisation, statut, icônes d'équipements +N, menu Réserver / Modifier / Supprimer)
+  et panneau de détail de la salle sélectionnée (photo ou visuel par défaut avec carrousel si `metadata.photos`, capacité, localisation,
+  type, description, équipements affectés avec « Voir tout (n) », 3 prochaines réservations avec statut, boutons Modifier / Réserver cette salle).
+  Statut affiché « Réservée » quand une réservation active (en attente / confirmée) couvre l'instant présent, « En maintenance » si la salle l'est.
+- **Équipements** (équipements, véhicules et autres) : catégorie, quantité, salle d'affectation, statut ; filtrable par salle (`?room=`).
+- **Réservations** : toutes les réservations (60 jours passés à 1 an à venir), statut modifiable par le gestionnaire ou le demandeur (règles inchangées).
+- **Calendrier** : vue mensuelle (`?month=YYYY-MM`) des réservations non annulées.
+- **Taux d'occupation** = heures réservées des salles sur 30 jours ÷ (salles disponibles × 30 j × 12 h d'ouverture, 8 h – 20 h), comparé aux 30 jours précédents.
+- **Aucune migration** : les champs propres aux salles / équipements sont rangés dans `resources.metadata` (salle : `capacity`, `roomType`, `photos` ;
+  équipement : `category`, `roomId`). Les formulaires « Nouvelle salle » / « Nouvel équipement » sont **provisoires** (champs de base) : ils seront refondus
+  d'après leurs maquettes (téléversement de photos, etc.), avec éventuellement de vraies colonnes.
+- Écarts avec la maquette : pas de bouton « Filtres », pas de cases à cocher / actions groupées, pas de sélecteur de taille de page, pas de téléversement de photos
+  de salle (en attente de la maquette du formulaire).
+
+Vérifié par typecheck/lint/build uniquement — rendu à contrôler en conditions réelles.
+
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
 Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de
@@ -352,7 +374,7 @@ Migrations plus anciennes (mai–sept.) : `db/migrations/*.sql` par ordre de dat
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
 - **Tout ce qui est décrit comme « vérifié par typecheck/lint/build uniquement » ci-dessus** (Training, Certifications, Bibliothèque, Annonces, publication Facebook/Instagram, versets du jour) est à tester en conditions réelles ; la publication Meta n'a jamais été essayée avec de vrais jetons.
-- Refonte selon les maquettes des modules restants : Documents, Resources, Analytics, Reports,
+- Refonte selon les maquettes des modules restants : Documents, Analytics, Reports,
   Settings, AI, Teams. 
 - Finir la vérification live des Phases 14 et 15, puis les marquer ✅.
 - Reporté volontairement : paiements mobiles (Orange Money, MTN, Wave), RAG/pgvector, streaming des
