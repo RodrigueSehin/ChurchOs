@@ -18,6 +18,7 @@ import {
   LIBRARY_COVER_BUCKET,
   RESOURCE_MAX_BYTES,
   RESOURCE_MIME_TYPES,
+  resolveResourceMime,
   RESOURCE_STATUS_LABELS,
   RESOURCE_TYPE_LABELS,
   RESOURCE_VISIBILITY_LABELS,
@@ -75,8 +76,8 @@ export function ResourceFormDialog({
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
     setError(null);
-    if (f && !RESOURCE_MIME_TYPES.includes(f.type)) {
-      setError("Fichier : PDF, DOC, DOCX, PPT, PPTX, MP4, MP3, JPG ou PNG uniquement.");
+    if (f && !RESOURCE_MIME_TYPES.includes(resolveResourceMime(f))) {
+      setError("Fichier : PDF ou DOCX uniquement.");
       e.target.value = "";
       return setFile(null);
     }
@@ -113,10 +114,11 @@ export function ResourceFormDialog({
 
     startTransition(async () => {
       const supabase = createClient();
+      const fileMime = resolveResourceMime(file);
       const filePath = `${organizationId}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
       let coverPath: string | undefined;
       try {
-        const { error: uploadError } = await supabase.storage.from(LIBRARY_BUCKET).upload(filePath, file, { contentType: file.type });
+        const { error: uploadError } = await supabase.storage.from(LIBRARY_BUCKET).upload(filePath, file, { contentType: fileMime });
         if (uploadError) return setError(`Échec du téléversement : ${uploadError.message}`);
 
         if (cover) {
@@ -131,7 +133,7 @@ export function ResourceFormDialog({
         const result = await registerResource({
           filePath,
           fileName: file.name,
-          fileMime: file.type,
+          fileMime,
           fileSize: file.size,
           fields,
           coverPath,
@@ -160,7 +162,7 @@ export function ResourceFormDialog({
           </span>
           <div>
             <DialogTitle className="text-xl">Ajouter une ressource</DialogTitle>
-            <DialogDescription>Partagez un livre, un document, une vidéo, un audio ou tout autre contenu édifiant.</DialogDescription>
+            <DialogDescription>Partagez un livre, une étude, un enseignement ou tout autre document édifiant (PDF ou DOCX).</DialogDescription>
           </div>
         </DialogHeader>
 
@@ -233,9 +235,9 @@ export function ResourceFormDialog({
                 >
                   <Upload className="size-5 text-primary" />
                   {file ? file.name : "Cliquer pour ajouter un fichier"}
-                  <span className="text-[11px] text-slate-500">PDF, DOC, DOCX, PPT, MP4, MP3, JPG, PNG (max 100 Mo)</span>
+                  <span className="text-[11px] text-slate-500">PDF ou DOCX (max 100 Mo)</span>
                 </button>
-                <input ref={fileInput} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mp3,.jpg,.jpeg,.png" className="sr-only" onChange={onFileChange} />
+                <input ref={fileInput} type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" onChange={onFileChange} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Image de couverture (optionnelle)</Label>
@@ -318,7 +320,7 @@ export function ResourceFormDialog({
                   <img src={coverPreview} alt="" className="size-full object-cover" />
                 )}
                 {file && (
-                  <span className="absolute left-2 top-2 rounded bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-navy">{formatKind(file.type)}</span>
+                  <span className="absolute left-2 top-2 rounded bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-navy">{formatKind(resolveResourceMime(file))}</span>
                 )}
               </div>
               <p className="text-sm font-semibold text-navy">{title || "Titre de la ressource"}</p>

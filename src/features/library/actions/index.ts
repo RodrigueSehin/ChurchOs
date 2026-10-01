@@ -1,11 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
-
 import { checkPermission } from "@/lib/auth/guards";
-import { db } from "@/lib/db/client";
-import { libraryResources } from "@/lib/db/schema";
 import { createClient } from "@/lib/supabase/server";
 import {
   COVER_MAX_BYTES,
@@ -25,10 +21,6 @@ export interface LibraryActionState {
 
 function orNull(value: string) {
   return value.trim() === "" ? null : value.trim();
-}
-
-function canManageLibrary(check: Awaited<ReturnType<typeof checkPermission>>) {
-  return check.context.isAdmin || check.context.permissions.has("training.manage");
 }
 
 /** Enregistre une ressource dont le fichier (jusqu'à 100 Mo) a déjà été envoyé DIRECTEMENT du
@@ -62,7 +54,7 @@ export async function registerResource(input: {
   }
   if (!RESOURCE_MIME_TYPES.includes(input.fileMime)) {
     await discard();
-    return { error: "Type de fichier non autorisé (PDF, DOC, DOCX, PPT, PPTX, MP4, MP3, JPG, PNG)." };
+    return { error: "Type de fichier non autorisé (PDF ou DOCX uniquement)." };
   }
   if (!(input.fileSize > 0) || input.fileSize > RESOURCE_MAX_BYTES) {
     await discard();
@@ -132,36 +124,6 @@ export async function registerResource(input: {
 
   revalidatePath("/library");
   return { success: true };
-}
-
-/** Ouvre ou télécharge : renvoie une URL signée (5 min) et incrémente le compteur. La visibilité est
- * revérifiée ici en plus de la policy RLS du bucket. */
-export async function accessResource(resourceId: string, mode: "view" | "download"): Promise<{ url?: string; error?: string }> {
-  const check = await checkPermission("training.view");
-  if (!check.allowed) return { error: "Vous n'avez pas la permission de consulter cette ressource." };
-
-  const organizationId = check.organization.organization.id;
-  const [resource] = await db
-    .select()
-    .from(libraryResources)
-    .where(and(eq(libraryResources.id, resourceId), eq(libraryResources.organizationId, organizationId)));
-  if (!resource) return { error: "Ressource introuvable." };
-  if (!canManageLibrary(check) && (resource.status !== "published" || resource.visibility !== "members")) {
-    return { error: "Cette ressource n'est pas accessible." };
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.storage
-    .from(LIBRARY_BUCKET)
-    .createSignedUrl(resource.filePath, 300, mode === "download" ? { download: resource.fileName ?? true } : undefined);
-  if (error || !data) return { error: error?.message ?? "Échec de la génération du lien." };
-
-  await db
-    .update(libraryResources)
-    .set(mode === "download" ? { downloadCount: sql`${libraryResources.downloadCount} + 1` } : { viewCount: sql`${libraryResources.viewCount} + 1` })
-    .where(eq(libraryResources.id, resourceId));
-
-  return { url: data.signedUrl };
 }
 
 export async function toggleBookmark(resourceId: string): Promise<{ bookmarked?: boolean; error?: string }> {

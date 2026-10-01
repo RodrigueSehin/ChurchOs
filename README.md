@@ -215,10 +215,20 @@ signées) et `churchos-library-covers` (public, 5 Mo). Les fichiers sont envoyé
 Storage. Supabase plafonne aussi la taille par fichier au niveau du projet (Storage > Settings) : l'augmenter
 si 100 Mo est refusé.
 
-- Écarts avec la maquette : pas de bouton « Filtres » séparé (les filtres sont affichés), pas de durée
+- Écarts avec la maquette : pas de bouton « Filtres » séparé (les filtres sont affichés), pas de durée,
   des vidéos/audios (le formulaire n'en contient pas : la taille est affichée), « Année de publication » est un
   champ date, pas de modification d'une ressource existante (ajout / suppression seulement).
 - Le compteur de vues s'incrémente à l'ouverture, celui de téléchargements au téléchargement.
+
+**Formats : PDF et DOCX uniquement** (formulaire, bucket Storage et filtres ; les types vidéo/audio ont été
+retirés). Cliquer une carte ouvre `/library/[id]` : un PDF s'affiche dans la page (servi par
+`/api/library/[id]/file`, relayé en flux depuis l'URL signée, depuis notre origine), un DOCX est converti
+en HTML (mammoth) puis filtré par liste blanche (sanitize-html) ; au-delà de 20 Mo ou en cas d'échec de
+lecture, un message invite à télécharger. « Télécharger » (carte et page de lecture) passe par la même route
+(`?download=1`) et incrémente le compteur. Si `2026-10-06-library.sql` a déjà été exécutée, appliquer aussi
+[`2026-10-07-library-pdf-docx.sql`](db/migrations/2026-10-07-library-pdf-docx.sql) (restreint le bucket).
+Les mises en page très riches d'un DOCX (colonnes, zones de texte, en-têtes) ne sont pas reproduites à
+l'identique par l'aperçu ; le téléchargement donne le fichier d'origine.
 
 Vérifié par typecheck/lint/build uniquement.
 

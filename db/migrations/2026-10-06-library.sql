@@ -98,11 +98,8 @@ values (
   false,
   104857600,
   array[
-    'application/pdf', 'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'video/mp4', 'audio/mpeg', 'image/jpeg', 'image/png'
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ]
 )
 on conflict (id) do update set

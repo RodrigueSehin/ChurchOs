@@ -2,13 +2,13 @@ import { z } from "zod";
 
 const optionalString = z.string().nullish().transform((v) => v ?? "");
 
+/** La bibliothèque n'accepte que des PDF et des DOCX : les types « vidéo » et « audio » (restes d'une
+ * première version) ne sont plus proposés, mais les éventuelles ressources existantes restent lisibles. */
 export const RESOURCE_TYPE_TABS: Record<string, string> = {
   book: "Livres",
   bible_study: "Études bibliques",
   teaching: "Enseignements",
   document: "Documents",
-  video: "Vidéos",
-  audio: "Audios",
 };
 
 export const RESOURCE_TYPE_LABELS: Record<string, string> = {
@@ -16,8 +16,6 @@ export const RESOURCE_TYPE_LABELS: Record<string, string> = {
   bible_study: "Étude biblique",
   teaching: "Enseignement",
   document: "Document",
-  video: "Vidéo",
-  audio: "Audio",
 };
 
 export const RESOURCE_VISIBILITY_LABELS: Record<string, string> = {
@@ -34,10 +32,7 @@ export const RESOURCE_STATUS_LABELS: Record<string, string> = {
 /** Formats (déduits du type MIME du fichier) proposés dans le filtre « Tous les types ». */
 export const RESOURCE_FORMAT_LABELS: Record<string, string> = {
   pdf: "PDF",
-  document: "Word / PowerPoint",
-  video: "Vidéo",
-  audio: "Audio",
-  image: "Image",
+  word: "Word (DOCX)",
 };
 
 export const LIBRARY_BUCKET = "churchos-library";
@@ -45,17 +40,18 @@ export const LIBRARY_COVER_BUCKET = "churchos-library-covers";
 export const RESOURCE_MAX_BYTES = 100 * 1024 * 1024;
 export const COVER_MAX_BYTES = 5 * 1024 * 1024;
 
-export const RESOURCE_MIME_TYPES = [
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "video/mp4",
-  "audio/mpeg",
-  "image/jpeg",
-  "image/png",
-];
+export const PDF_MIME = "application/pdf";
+export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+export const RESOURCE_MIME_TYPES = [PDF_MIME, DOCX_MIME];
+
+/** Type MIME d'un fichier choisi : certains navigateurs/systèmes laissent `file.type` vide pour un .docx. */
+export function resolveResourceMime(file: { name: string; type: string }) {
+  if (RESOURCE_MIME_TYPES.includes(file.type)) return file.type;
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".pdf")) return PDF_MIME;
+  if (name.endsWith(".docx")) return DOCX_MIME;
+  return file.type;
+}
 export const COVER_MIME_EXTENSIONS: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 
 export const DEFAULT_LIBRARY_CATEGORIES = [
@@ -76,6 +72,7 @@ export const DEFAULT_LIBRARY_CATEGORIES = [
 export function formatKind(mime: string | null | undefined) {
   if (!mime) return "Fichier";
   if (mime === "application/pdf") return "PDF";
+  if (mime === DOCX_MIME) return "DOCX";
   if (mime.startsWith("video/")) return "Vidéo";
   if (mime.startsWith("audio/")) return "Audio";
   if (mime.startsWith("image/")) return "Image";
@@ -92,7 +89,7 @@ export function formatSize(bytes: number | null | undefined) {
 
 export const resourceSchema = z.object({
   title: z.string().trim().min(1, "Titre requis").max(200, "Titre : 200 caractères maximum"),
-  resourceType: z.enum(["book", "bible_study", "teaching", "document", "video", "audio"], { message: "Type requis" }),
+  resourceType: z.enum(["book", "bible_study", "teaching", "document"], { message: "Type requis" }),
   categoryId: z.string().min(1, "Catégorie requise"),
   author: optionalString,
   publishedOn: optionalString,

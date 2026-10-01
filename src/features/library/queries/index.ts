@@ -79,14 +79,11 @@ export async function getLibraryStats(organizationId: string, canManage: boolean
 
 const FORMAT_CONDITIONS: Record<string, SQL> = {
   pdf: sql`${libraryResources.fileMime} = 'application/pdf'`,
-  document: sql`(${libraryResources.fileMime} like '%word%' or ${libraryResources.fileMime} like '%powerpoint%' or ${libraryResources.fileMime} like '%presentation%')`,
-  video: sql`${libraryResources.fileMime} like 'video/%'`,
-  audio: sql`${libraryResources.fileMime} like 'audio/%'`,
-  image: sql`${libraryResources.fileMime} like 'image/%'`,
+  word: sql`${libraryResources.fileMime} like '%wordprocessingml%'`,
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TYPES = ["book", "bible_study", "teaching", "document", "video", "audio"];
+const TYPES = ["book", "bible_study", "teaching", "document"];
 
 export async function getLibraryResources({
   organizationId,
@@ -217,4 +214,33 @@ export async function getPopularResources(organizationId: string, canManage: boo
     .where(visibleTo(organizationId, canManage))
     .orderBy(desc(libraryResources.downloadCount), desc(libraryResources.createdAt))
     .limit(limit);
+}
+
+/** Une ressource que l'utilisateur a le droit de voir (mêmes règles que la liste), ou `null`. */
+export async function getResourceForViewer(organizationId: string, resourceId: string, canManage: boolean) {
+  if (!UUID_RE.test(resourceId)) return null;
+  const [row] = await db
+    .select({
+      id: libraryResources.id,
+      title: libraryResources.title,
+      resourceType: libraryResources.resourceType,
+      author: libraryResources.author,
+      publisher: libraryResources.publisher,
+      publishedOn: libraryResources.publishedOn,
+      description: libraryResources.description,
+      filePath: libraryResources.filePath,
+      fileName: libraryResources.fileName,
+      fileMime: libraryResources.fileMime,
+      fileSize: libraryResources.fileSize,
+      coverUrl: libraryResources.coverUrl,
+      status: libraryResources.status,
+      tags: libraryResources.tags,
+      viewCount: libraryResources.viewCount,
+      downloadCount: libraryResources.downloadCount,
+      categoryName: libraryCategories.name,
+    })
+    .from(libraryResources)
+    .leftJoin(libraryCategories, eq(libraryCategories.id, libraryResources.categoryId))
+    .where(and(visibleTo(organizationId, canManage), eq(libraryResources.id, resourceId)));
+  return row ?? null;
 }

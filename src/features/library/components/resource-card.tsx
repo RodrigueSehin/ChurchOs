@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bookmark, Download, Eye, FileText, Film, Headphones, ImageIcon, MoreVertical, Star, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
-import { accessResource, deleteResource, rateResource, toggleBookmark } from "@/features/library/actions";
+import { deleteResource, rateResource, toggleBookmark } from "@/features/library/actions";
 import { formatKind, formatSize } from "@/features/library/schemas";
 import type { getLibraryResources } from "@/features/library/queries";
 import { cn } from "@/lib/utils";
@@ -27,16 +28,6 @@ export function ResourceCard({ resource, canManage }: { resource: Resource; canM
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [bookmarked, setBookmarked] = useState(resource.bookmarked);
-
-  function open(mode: "view" | "download") {
-    setError(null);
-    startTransition(async () => {
-      const res = await accessResource(resource.id, mode);
-      if (res.error || !res.url) return setError(res.error ?? "Échec de l'ouverture.");
-      window.open(res.url, mode === "view" ? "_blank" : "_self", "noopener");
-      router.refresh();
-    });
-  }
 
   function bookmark() {
     setError(null);
@@ -69,11 +60,9 @@ export function ResourceCard({ resource, canManage }: { resource: Resource; canM
 
   return (
     <article className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
-      <button
-        type="button"
-        onClick={() => open("view")}
-        disabled={pending}
-        aria-label={`Ouvrir ${resource.title}`}
+      <Link
+        href={`/library/${resource.id}`}
+        aria-label={`Lire ${resource.title}`}
         className="relative block aspect-[16/9] bg-gradient-to-br from-navy to-primary"
       >
         {resource.coverUrl ? (
@@ -89,15 +78,15 @@ export function ResourceCard({ resource, canManage }: { resource: Resource; canM
             {resource.status === "draft" ? "Brouillon" : "Archivé"}
           </Badge>
         )}
-      </button>
+      </Link>
 
       <div className="flex flex-1 flex-col gap-1.5 p-3.5">
         {resource.categoryName && (
           <span className="w-fit rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-primary">{resource.categoryName}</span>
         )}
-        <button type="button" onClick={() => open("view")} className="text-left text-sm font-semibold text-navy hover:underline">
+        <Link href={`/library/${resource.id}`} className="text-sm font-semibold text-navy hover:underline">
           {resource.title}
-        </button>
+        </Link>
         {resource.author && <p className="text-xs text-slate-500">{resource.author}</p>}
         <p className="flex items-center gap-1.5 text-xs text-slate-400">
           <KindIcon mime={resource.fileMime} className="size-3.5" />
@@ -124,15 +113,13 @@ export function ResourceCard({ resource, canManage }: { resource: Resource; canM
             >
               <Bookmark className={cn("size-4", bookmarked && "fill-current")} />
             </button>
-            <button
-              type="button"
-              onClick={() => open("download")}
-              disabled={pending}
+            <a
+              href={`/api/library/${resource.id}/file?download=1`}
               aria-label="Télécharger"
-              className="rounded-lg bg-primary/10 p-2 text-primary hover:bg-primary/15 disabled:opacity-60"
+              className="rounded-lg bg-primary/10 p-2 text-primary hover:bg-primary/15"
             >
               <Download className="size-4" />
-            </button>
+            </a>
             <details className="relative">
               <summary className="flex cursor-pointer list-none rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Plus d'actions">
                 <MoreVertical className="size-4" />
