@@ -1,6 +1,9 @@
 import { Award, BookOpen, TrendingUp, Users } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { guardSchema } from "@/lib/db/schema-guard";
+import { MigrationNotice } from "@/components/shared/migration-notice";
+
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
@@ -65,14 +68,25 @@ export default async function CertificationsPage({
   const personId = await getPersonIdForUser(organizationId, check.user.email);
   const viewer = { canSeeAll, personId };
 
-  const [stats, list, byProgram, recent, people, courses] = await Promise.all([
+  const loaded = await guardSchema(() =>
+    Promise.all([
     getCertificationStats(organizationId, viewer),
     getCertificationsList({ organizationId, viewer, search: params.q, status, page }),
     getCertificationsByProgram(organizationId, viewer),
     getRecentCertifications(organizationId, viewer, 3),
     canCertify ? getPeopleForSelect(organizationId) : Promise.resolve([]),
     canCertify ? getCoursesForSelect(organizationId) : Promise.resolve([]),
-  ]);
+    ]),
+  );
+  if (!loaded.ok) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHero {...HERO} />
+        <MigrationNotice migration="2026-10-05-certification-form-fields.sql" />
+      </div>
+    );
+  }
+  const [stats, list, byProgram, recent, people, courses] = loaded.data;
 
   const counts = { all: stats.total, pending: stats.pending, obtained: stats.obtained, expired: stats.expired };
   const pct = (value: number) => (stats.total === 0 ? 0 : Math.round((value / stats.total) * 100));

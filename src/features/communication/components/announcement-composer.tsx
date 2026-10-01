@@ -24,7 +24,6 @@ import {
   Users,
   Video,
   X,
-  Youtube,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -165,7 +164,7 @@ export function AnnouncementComposer({
   const [mode, setMode] = useState<"publish" | "draft">(announcement?.status === "draft" ? "draft" : "publish");
   const [socialOn, setSocialOn] = useState(false);
   const [social, setSocial] = useState<Record<string, string>>({}); // provider -> connectionId (si coché)
-  const [previewTab, setPreviewTab] = useState<"facebook" | "instagram" | "youtube" | "whatsapp">("facebook");
+  const [previewTab, setPreviewTab] = useState<"facebook" | "instagram" | "whatsapp">("facebook");
 
   const byProvider = (p: string) => connections.filter((c) => c.provider === p);
   const selectedConnections = connections.filter((c) => Object.values(social).includes(c.id));
@@ -641,12 +640,6 @@ export function AnnouncementComposer({
                     </div>
                   );
                 })}
-                <div className="flex items-center gap-2 text-xs text-slate-400">
-                  <input type="checkbox" disabled aria-label="YouTube" />
-                  <Youtube className="size-4 shrink-0" />
-                  <span className="w-20 font-medium">YouTube</span>
-                  <span>Indisponible : l&apos;API YouTube n&apos;accepte pas les publications texte.</span>
-                </div>
                 <div className="flex items-center gap-2 text-xs">
                   <MessageCircle className="ml-5 size-4 shrink-0 text-success" />
                   <span className="w-20 font-medium text-navy">WhatsApp</span>
@@ -719,7 +712,6 @@ export function AnnouncementComposer({
             {([
               ["facebook", "Facebook"],
               ["instagram", "Instagram"],
-              ["youtube", "YouTube"],
               ["whatsapp", "WhatsApp"],
             ] as const).map(([key, label]) => (
               <button
@@ -769,11 +761,6 @@ export function AnnouncementComposer({
               )}
               <p className="whitespace-pre-wrap px-3 py-2 text-xs text-slate-700">{title ? `${title}\n\n${plain}` : plain}</p>
             </div>
-          )}
-          {previewTab === "youtube" && (
-            <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
-              La publication d&apos;annonces sur YouTube n&apos;est pas disponible : l&apos;API YouTube ne permet pas de publier de texte (seulement des vidéos).
-            </p>
           )}
           {previewTab === "whatsapp" && (
             <div className="rounded-lg bg-[#e7f5dd] p-3 text-sm">

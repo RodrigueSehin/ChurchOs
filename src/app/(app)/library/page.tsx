@@ -2,6 +2,9 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, Download, Library, Star, Tag } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { guardSchema } from "@/lib/db/schema-guard";
+import { MigrationNotice } from "@/components/shared/migration-notice";
+
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
@@ -50,7 +53,8 @@ export default async function LibraryPage({
   const organizationId = check.organization.organization.id;
   const canManage = check.context.isAdmin || check.context.permissions.has("training.manage");
 
-  const [stats, list, categories, popular] = await Promise.all([
+  const loaded = await guardSchema(() =>
+    Promise.all([
     getLibraryStats(organizationId, canManage),
     getLibraryResources({
       organizationId,
@@ -66,7 +70,17 @@ export default async function LibraryPage({
     }),
     getCategoryCounts(organizationId, canManage),
     getPopularResources(organizationId, canManage, 5),
-  ]);
+    ]),
+  );
+  if (!loaded.ok) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHero {...HERO} />
+        <MigrationNotice migration="2026-10-06-library.sql" />
+      </div>
+    );
+  }
+  const [stats, list, categories, popular] = loaded.data;
 
   const filtered = Boolean(params.q || type || params.categoryId || params.format || params.saved);
 

@@ -3,6 +3,8 @@ import { and, eq } from "drizzle-orm";
 import { Megaphone } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { guardSchema } from "@/lib/db/schema-guard";
+import { MigrationNotice } from "@/components/shared/migration-notice";
 import { db } from "@/lib/db/client";
 import { announcements } from "@/lib/db/schema";
 import { PageHeader } from "@/components/shared/page-header";
@@ -33,7 +35,9 @@ export default async function EditAnnouncementPage({ params }: { params: Promise
     .where(and(eq(announcements.id, id), eq(announcements.organizationId, organization.id)));
   if (!announcement) notFound();
 
-  const [audienceOptions, connections] = await Promise.all([getAudienceOptions(organization.id), getSocialConnections(organization.id)]);
+  const loaded = await guardSchema(() => Promise.all([getAudienceOptions(organization.id), getSocialConnections(organization.id)]));
+  if (!loaded.ok) return <MigrationNotice migration="2026-10-09-announcement-composer.sql" />;
+  const [audienceOptions, connections] = loaded.data;
 
   return (
     <div className="flex flex-col gap-6">
