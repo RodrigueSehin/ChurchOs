@@ -217,7 +217,8 @@ si 100 Mo est refusé.
 
 - Écarts avec la maquette : pas de bouton « Filtres » séparé (les filtres sont affichés), pas de durée,
   des vidéos/audios (le formulaire n'en contient pas : la taille est affichée), « Année de publication » est un
-  champ date, pas de modification d'une ressource existante (ajout / suppression seulement).
+  champ date.
+- **Modification** : l'administrateur et le propriétaire de l'église (rôles `SUPER_ADMIN` / `CHURCH_OWNER`, `isAdmin`) voient « Modifier » dans le menu ⋮ de chaque carte et sur la page de lecture ; le formulaire est pré-rempli, le fichier et la couverture ne sont remplacés que si on en choisit de nouveaux (couverture retirable), les anciens fichiers sont supprimés après coup. Le droit est revérifié côté serveur (`updateResource`). Les autres gestionnaires de formation peuvent ajouter et supprimer mais pas modifier.
 - Le compteur de vues s'incrémente à l'ouverture, celui de téléchargements au téléchargement.
 
 **Formats : PDF et DOCX uniquement** (formulaire, bucket Storage et filtres ; les types vidéo/audio ont été

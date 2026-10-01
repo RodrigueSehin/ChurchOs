@@ -154,6 +154,12 @@ export async function getLibraryResources({
         viewCount: libraryResources.viewCount,
         downloadCount: libraryResources.downloadCount,
         categoryName: libraryCategories.name,
+        categoryId: libraryResources.categoryId,
+        publishedOn: libraryResources.publishedOn,
+        publisher: libraryResources.publisher,
+        tags: libraryResources.tags,
+        visibility: libraryResources.visibility,
+        fileName: libraryResources.fileName,
         createdBy: libraryResources.createdBy,
       })
       .from(libraryResources)
@@ -238,6 +244,8 @@ export async function getResourceForViewer(organizationId: string, resourceId: s
       viewCount: libraryResources.viewCount,
       downloadCount: libraryResources.downloadCount,
       categoryName: libraryCategories.name,
+      categoryId: libraryResources.categoryId,
+      visibility: libraryResources.visibility,
     })
     .from(libraryResources)
     .leftJoin(libraryCategories, eq(libraryCategories.id, libraryResources.categoryId))

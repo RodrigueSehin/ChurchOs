@@ -126,6 +126,144 @@ export async function registerResource(input: {
   return { success: true };
 }
 
+/** Chemin Storage d'une couverture de NOTRE bucket public (sinon `null`). */
+function coverPathFromUrl(url: string | null | undefined) {
+  const marker = `/object/public/${LIBRARY_COVER_BUCKET}/`;
+  const i = url?.indexOf(marker) ?? -1;
+  return url && i >= 0 ? decodeURIComponent(url.slice(i + marker.length)) : null;
+}
+
+/**
+ * Modifie une ressource — réservé à l'administrateur / propriétaire de l'église (`isAdmin` :
+ * SUPER_ADMIN / CHURCH_OWNER). Les champs texte sont toujours renvoyés ; le fichier et la couverture
+ * ne le sont que s'ils changent (envoi direct navigateur → Storage, comme à l'ajout). Les anciens
+ * fichiers ne sont supprimés qu'une fois la ligne mise à jour ; les nouveaux sont retirés si la mise
+ * à jour échoue.
+ */
+export async function updateResource(input: {
+  resourceId: string;
+  fields: Record<string, string>;
+  filePath?: string;
+  fileName?: string;
+  fileMime?: string;
+  fileSize?: number;
+  coverPath?: string;
+  coverMime?: string;
+  coverSize?: number;
+  removeCover?: boolean;
+}): Promise<LibraryActionState> {
+  const check = await checkPermission("training.manage");
+  if (!check.allowed || !check.context.isAdmin) {
+    return { error: "Seul l'administrateur ou le propriétaire de l'église peut modifier une ressource." };
+  }
+
+  const organizationId = check.organization.organization.id;
+  const supabase = await createClient();
+  const discardNew = async () => {
+    if (input.filePath) await supabase.storage.from(LIBRARY_BUCKET).remove([input.filePath]);
+    if (input.coverPath) await supabase.storage.from(LIBRARY_COVER_BUCKET).remove([input.coverPath]);
+  };
+
+  const { data: existing } = await supabase
+    .from("library_resources")
+    .select("file_path, cover_url")
+    .eq("id", input.resourceId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (!existing) {
+    await discardNew();
+    return { error: "Ressource introuvable." };
+  }
+
+  if (input.filePath) {
+    if (!input.filePath.startsWith(`${organizationId}/`) || input.filePath.includes("..")) {
+      await discardNew();
+      return { error: "Chemin de fichier invalide." };
+    }
+    if (!RESOURCE_MIME_TYPES.includes(input.fileMime ?? "")) {
+      await discardNew();
+      return { error: "Type de fichier non autorisé (PDF ou DOCX uniquement)." };
+    }
+    if (!((input.fileSize ?? 0) > 0) || (input.fileSize ?? 0) > RESOURCE_MAX_BYTES) {
+      await discardNew();
+      return { error: "Fichier trop volumineux (100 Mo maximum)." };
+    }
+  }
+  if (input.coverPath) {
+    if (!input.coverPath.startsWith(`${organizationId}/`) || input.coverPath.includes("..")) {
+      await discardNew();
+      return { error: "Chemin d'image invalide." };
+    }
+    if (!COVER_MIME_EXTENSIONS[input.coverMime ?? ""] || !((input.coverSize ?? 0) > 0) || (input.coverSize ?? 0) > COVER_MAX_BYTES) {
+      await discardNew();
+      return { error: "Image de couverture : JPG, PNG ou WebP, 5 Mo maximum." };
+    }
+  }
+
+  const parsed = resourceSchema.safeParse(input.fields);
+  if (!parsed.success) {
+    await discardNew();
+    return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
+  }
+  const v = parsed.data;
+
+  const { data: category } = await supabase
+    .from("library_categories")
+    .select("id")
+    .eq("id", v.categoryId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (!category) {
+    await discardNew();
+    return { error: "Catégorie introuvable." };
+  }
+
+  const tags = v.tags
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
+  let coverUrl: string | null | undefined; // undefined = inchangée
+  if (input.coverPath) coverUrl = supabase.storage.from(LIBRARY_COVER_BUCKET).getPublicUrl(input.coverPath).data.publicUrl;
+  else if (input.removeCover) coverUrl = null;
+
+  const { error } = await supabase
+    .from("library_resources")
+    .update({
+      category_id: v.categoryId,
+      title: v.title,
+      resource_type: v.resourceType,
+      author: orNull(v.author),
+      published_on: orNull(v.publishedOn),
+      publisher: orNull(v.publisher),
+      description: v.description,
+      visibility: v.visibility,
+      status: v.status,
+      tags,
+      ...(input.filePath
+        ? { file_path: input.filePath, file_name: input.fileName, file_mime: input.fileMime, file_size: input.fileSize }
+        : {}),
+      ...(coverUrl !== undefined ? { cover_url: coverUrl } : {}),
+    })
+    .eq("id", input.resourceId)
+    .eq("organization_id", organizationId);
+  if (error) {
+    await discardNew();
+    return { error: error.message };
+  }
+
+  if (input.filePath) await supabase.storage.from(LIBRARY_BUCKET).remove([existing.file_path]);
+  if (coverUrl !== undefined) {
+    const oldCover = coverPathFromUrl(existing.cover_url);
+    if (oldCover) await supabase.storage.from(LIBRARY_COVER_BUCKET).remove([oldCover]);
+  }
+
+  revalidatePath("/library");
+  revalidatePath(`/library/${input.resourceId}`);
+  return { success: true };
+}
+
 export async function toggleBookmark(resourceId: string): Promise<{ bookmarked?: boolean; error?: string }> {
   const check = await checkPermission("training.view");
   if (!check.allowed) return { error: "Action non autorisée." };
@@ -193,11 +331,8 @@ export async function deleteResource(resourceId: string): Promise<LibraryActionS
   if (error) return { error: error.message };
 
   await supabase.storage.from(LIBRARY_BUCKET).remove([resource.file_path]);
-  const marker = `/object/public/${LIBRARY_COVER_BUCKET}/`;
-  const i = resource.cover_url?.indexOf(marker) ?? -1;
-  if (resource.cover_url && i >= 0) {
-    await supabase.storage.from(LIBRARY_COVER_BUCKET).remove([decodeURIComponent(resource.cover_url.slice(i + marker.length))]);
-  }
+  const coverPath = coverPathFromUrl(resource.cover_url);
+  if (coverPath) await supabase.storage.from(LIBRARY_COVER_BUCKET).remove([coverPath]);
 
   revalidatePath("/library");
   return { success: true };

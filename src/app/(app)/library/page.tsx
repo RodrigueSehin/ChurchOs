@@ -136,7 +136,14 @@ export default async function LibraryPage({
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {list.rows.map((resource) => (
-                  <ResourceCard key={resource.id} resource={resource} canManage={canManage} />
+                  <ResourceCard
+                    key={resource.id}
+                    resource={resource}
+                    canManage={canManage}
+                    canEdit={check.context.isAdmin}
+                    organizationId={organizationId}
+                    categories={categories}
+                  />
                 ))}
               </div>
             )}

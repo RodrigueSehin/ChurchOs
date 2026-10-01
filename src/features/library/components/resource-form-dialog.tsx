@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FormSelect } from "@/components/shared/form-select";
 import { IconInput } from "@/components/shared/icon-input";
-import { registerResource } from "@/features/library/actions";
+import { registerResource, updateResource } from "@/features/library/actions";
 import {
   COVER_MAX_BYTES,
   COVER_MIME_EXTENSIONS,
@@ -23,6 +23,7 @@ import {
   RESOURCE_TYPE_LABELS,
   RESOURCE_VISIBILITY_LABELS,
   formatKind,
+  formatSize,
 } from "@/features/library/schemas";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -45,32 +46,76 @@ function sanitizeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
 }
 
-/** Formulaire « Ajouter une ressource » : 3 sections + aperçu de la carte. Les fichiers partent
- * directement du navigateur vers Supabase Storage (100 Mo / 5 Mo : au-delà de la limite Vercel). */
+/** Ressource telle qu'elle pré-remplit le formulaire en mode modification. */
+export interface EditableResource {
+  id: string;
+  title: string;
+  resourceType: string;
+  categoryId: string | null;
+  author: string | null;
+  publishedOn: string | null;
+  publisher: string | null;
+  description: string;
+  visibility: string;
+  status: string;
+  tags: string[];
+  coverUrl: string | null;
+  fileName: string | null;
+  fileMime: string | null;
+  fileSize: number | null;
+}
+
+/** Formulaire « Ajouter une ressource » (3 sections + aperçu de la carte) ; avec `resource`, il sert à
+ * la modifier (réservé à l'administrateur / propriétaire — l'action serveur le revérifie). Les fichiers
+ * partent directement du navigateur vers Supabase Storage (100 Mo / 5 Mo : au-delà de la limite Vercel) ;
+ * en modification, le fichier et la couverture ne sont remplacés que si on en choisit de nouveaux. */
 export function ResourceFormDialog({
   organizationId,
   categories,
+  resource,
+  trigger,
 }: {
   organizationId: string;
   categories: { id: string; name: string }[];
+  resource?: EditableResource;
+  trigger?: React.ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [author, setAuthor] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState("published");
+  const editing = Boolean(resource);
+  const [title, setTitle] = useState(resource?.title ?? "");
+  const [type, setType] = useState(resource?.resourceType ?? "");
+  const [categoryId, setCategoryId] = useState(resource?.categoryId ?? "");
+  const [author, setAuthor] = useState(resource?.author ?? "");
+  const [description, setDescription] = useState(resource?.description ?? "");
+  const [status, setStatus] = useState(resource?.status ?? "published");
   const [file, setFile] = useState<File | null>(null);
   const [cover, setCover] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [removeCover, setRemoveCover] = useState(false);
+
+  /** Rouvre le formulaire avec les valeurs courantes de la ressource (ou vide en création). */
+  function openDialog() {
+    setTitle(resource?.title ?? "");
+    setType(resource?.resourceType ?? "");
+    setCategoryId(resource?.categoryId ?? "");
+    setAuthor(resource?.author ?? "");
+    setDescription(resource?.description ?? "");
+    setStatus(resource?.status ?? "published");
+    setFile(null);
+    setCover(null);
+    setCoverPreview(null);
+    setRemoveCover(false);
+    setError(null);
+    setOpen(true);
+  }
   const fileInput = useRef<HTMLInputElement>(null);
   const coverInput = useRef<HTMLInputElement>(null);
 
+  const shownCover = coverPreview ?? (removeCover ? null : resource?.coverUrl ?? null);
   const categoryName = categories.find((c) => c.id === categoryId)?.name ?? "";
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -100,12 +145,13 @@ export function ResourceFormDialog({
     }
     setCover(f);
     setCoverPreview(f ? URL.createObjectURL(f) : null);
+    if (f) setRemoveCover(false);
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    if (!file) return setError("Ajoutez le fichier de la ressource.");
+    if (!file && !editing) return setError("Ajoutez le fichier de la ressource.");
     const formData = new FormData(e.currentTarget);
     const fields: Record<string, string> = {};
     for (const key of ["title", "resourceType", "categoryId", "author", "publishedOn", "publisher", "description", "visibility", "status", "tags"]) {
@@ -114,36 +160,57 @@ export function ResourceFormDialog({
 
     startTransition(async () => {
       const supabase = createClient();
-      const fileMime = resolveResourceMime(file);
-      const filePath = `${organizationId}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
+      const fileMime = file ? resolveResourceMime(file) : undefined;
+      const filePath = file ? `${organizationId}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}` : undefined;
       let coverPath: string | undefined;
+      const discard = async () => {
+        if (filePath) await supabase.storage.from(LIBRARY_BUCKET).remove([filePath]);
+        if (coverPath) await supabase.storage.from(LIBRARY_COVER_BUCKET).remove([coverPath]);
+      };
       try {
-        const { error: uploadError } = await supabase.storage.from(LIBRARY_BUCKET).upload(filePath, file, { contentType: fileMime });
-        if (uploadError) return setError(`Échec du téléversement : ${uploadError.message}`);
+        if (file && filePath) {
+          const { error: uploadError } = await supabase.storage.from(LIBRARY_BUCKET).upload(filePath, file, { contentType: fileMime });
+          if (uploadError) return setError(`Échec du téléversement : ${uploadError.message}`);
+        }
 
         if (cover) {
           coverPath = `${organizationId}/${crypto.randomUUID()}.${COVER_MIME_EXTENSIONS[cover.type]}`;
           const { error: coverError } = await supabase.storage.from(LIBRARY_COVER_BUCKET).upload(coverPath, cover, { contentType: cover.type });
           if (coverError) {
-            await supabase.storage.from(LIBRARY_BUCKET).remove([filePath]);
+            coverPath = undefined;
+            await discard();
             return setError(`Échec du téléversement de l'image : ${coverError.message}`);
           }
         }
 
-        const result = await registerResource({
-          filePath,
-          fileName: file.name,
-          fileMime,
-          fileSize: file.size,
-          fields,
-          coverPath,
-          coverMime: cover?.type,
-          coverSize: cover?.size,
-        });
+        const result = resource
+          ? await updateResource({
+              resourceId: resource.id,
+              fields,
+              filePath,
+              fileName: file?.name,
+              fileMime,
+              fileSize: file?.size,
+              coverPath,
+              coverMime: cover?.type,
+              coverSize: cover?.size,
+              removeCover: removeCover && !cover,
+            })
+          : await registerResource({
+              filePath: filePath!,
+              fileName: file!.name,
+              fileMime: fileMime!,
+              fileSize: file!.size,
+              fields,
+              coverPath,
+              coverMime: cover?.type,
+              coverSize: cover?.size,
+            });
         if (result.error) return setError(result.error);
         setOpen(false);
         router.refresh();
       } catch (err) {
+        await discard();
         setError(err instanceof Error ? err.message : "Échec de l'enregistrement.");
       }
     });
@@ -151,18 +218,26 @@ export function ResourceFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" size="sm" onClick={() => setOpen(true)}>
-        <Plus className="size-4" />
-        Ajouter une ressource
-      </Button>
+      {trigger ? (
+        <span onClick={openDialog}>{trigger}</span>
+      ) : (
+        <Button type="button" size="sm" onClick={openDialog}>
+          <Plus className="size-4" />
+          Ajouter une ressource
+        </Button>
+      )}
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
         <DialogHeader className="flex-row items-center gap-4">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-purple-100 text-purple-600">
             <BookOpen className="size-6" />
           </span>
           <div>
-            <DialogTitle className="text-xl">Ajouter une ressource</DialogTitle>
-            <DialogDescription>Partagez un livre, une étude, un enseignement ou tout autre document édifiant (PDF ou DOCX).</DialogDescription>
+            <DialogTitle className="text-xl">{editing ? "Modifier la ressource" : "Ajouter une ressource"}</DialogTitle>
+            <DialogDescription>
+              {editing
+                ? "Corrigez les informations de cette ressource ; le fichier n'est remplacé que si vous en choisissez un nouveau."
+                : "Partagez un livre, une étude, un enseignement ou tout autre document édifiant (PDF ou DOCX)."}
+            </DialogDescription>
           </div>
         </DialogHeader>
 
@@ -201,11 +276,11 @@ export function ResourceFormDialog({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="res-published">Année de publication (optionnelle)</Label>
-                <IconInput icon={CalendarDays} id="res-published" name="publishedOn" type="date" />
+                <IconInput icon={CalendarDays} id="res-published" name="publishedOn" type="date" defaultValue={resource?.publishedOn ?? ""} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="res-publisher">Éditeur / Source (optionnel)</Label>
-                <Input id="res-publisher" name="publisher" placeholder="Ex : Église La Source" />
+                <Input id="res-publisher" name="publisher" placeholder="Ex : Église La Source" defaultValue={resource?.publisher ?? ""} />
               </div>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -227,14 +302,18 @@ export function ResourceFormDialog({
             <SectionTitle step={2} title="Fichier et médias" hint="Ajoutez le fichier et une image de couverture." tone="bg-green-50 text-green-600" />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <Label>Fichier de la ressource *</Label>
+                <Label>{editing ? "Fichier de la ressource" : "Fichier de la ressource *"}</Label>
                 <button
                   type="button"
                   onClick={() => fileInput.current?.click()}
                   className="flex min-h-28 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-primary/40 bg-blue-50/60 p-3 text-center text-sm text-navy hover:bg-blue-50"
                 >
                   <Upload className="size-5 text-primary" />
-                  {file ? file.name : "Cliquer pour ajouter un fichier"}
+                  {file
+                    ? file.name
+                    : editing
+                      ? `Actuel : ${resource?.fileName ?? "fichier"}${resource?.fileSize ? ` (${formatSize(resource.fileSize)})` : ""} — cliquer pour le remplacer`
+                      : "Cliquer pour ajouter un fichier"}
                   <span className="text-[11px] text-slate-500">PDF ou DOCX (max 100 Mo)</span>
                 </button>
                 <input ref={fileInput} type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" onChange={onFileChange} />
@@ -246,9 +325,9 @@ export function ResourceFormDialog({
                   onClick={() => coverInput.current?.click()}
                   className="relative flex min-h-28 flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border border-dashed border-primary/40 bg-blue-50/60 p-3 text-center text-sm text-navy hover:bg-blue-50"
                 >
-                  {coverPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob)
-                    <img src={coverPreview} alt="" className="absolute inset-0 size-full object-cover" />
+                  {shownCover ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob) ou couverture du bucket public
+                    <img src={shownCover} alt="" className="absolute inset-0 size-full object-cover" />
                   ) : (
                     <>
                       <ImagePlus className="size-5 text-primary" />
@@ -258,6 +337,12 @@ export function ResourceFormDialog({
                   )}
                 </button>
                 <input ref={coverInput} type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" className="sr-only" onChange={onCoverChange} />
+                {resource?.coverUrl && !coverPreview && (
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <input type="checkbox" checked={removeCover} onChange={(e) => setRemoveCover(e.target.checked)} />
+                    Retirer l&apos;image de couverture
+                  </label>
+                )}
               </div>
             </div>
 
@@ -267,7 +352,7 @@ export function ResourceFormDialog({
                 <Label htmlFor="res-visibility">Visibilité *</Label>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-slate-400" />
-                  <FormSelect id="res-visibility" name="visibility" defaultValue="members" className="pl-9">
+                  <FormSelect id="res-visibility" name="visibility" defaultValue={resource?.visibility ?? "members"} className="pl-9">
                     {Object.entries(RESOURCE_VISIBILITY_LABELS).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
@@ -289,7 +374,7 @@ export function ResourceFormDialog({
                 <Label htmlFor="res-tags">Tags / Mots-clés (optionnels)</Label>
                 <div className="relative">
                   <Tag className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                  <Input id="res-tags" name="tags" placeholder="Ex : prière, foi, leadership" className="pl-9" />
+                  <Input id="res-tags" name="tags" placeholder="Ex : prière, foi, leadership" className="pl-9" defaultValue={resource?.tags.join(", ") ?? ""} />
                 </div>
               </div>
             </div>
@@ -301,7 +386,7 @@ export function ResourceFormDialog({
               </Button>
               <Button type="submit" disabled={pending}>
                 <Save className="size-4" />
-                {pending ? "Envoi en cours..." : "Enregistrer la ressource"}
+                {pending ? "Enregistrement..." : editing ? "Enregistrer les modifications" : "Enregistrer la ressource"}
               </Button>
             </div>
           </div>
@@ -315,12 +400,14 @@ export function ResourceFormDialog({
                 Aperçu
               </p>
               <div className="relative mb-3 aspect-[16/10] overflow-hidden rounded-lg bg-gradient-to-br from-navy to-primary">
-                {coverPreview && (
-                  // eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob)
-                  <img src={coverPreview} alt="" className="size-full object-cover" />
+                {shownCover && (
+                  // eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob) ou couverture du bucket public
+                  <img src={shownCover} alt="" className="size-full object-cover" />
                 )}
-                {file && (
-                  <span className="absolute left-2 top-2 rounded bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-navy">{formatKind(resolveResourceMime(file))}</span>
+                {(file || resource?.fileMime) && (
+                  <span className="absolute left-2 top-2 rounded bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-navy">
+                    {formatKind(file ? resolveResourceMime(file) : resource?.fileMime)}
+                  </span>
                 )}
               </div>
               <p className="text-sm font-semibold text-navy">{title || "Titre de la ressource"}</p>

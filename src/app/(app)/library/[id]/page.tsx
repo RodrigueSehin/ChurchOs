@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Download, FileText } from "lucide-react";
+import { ArrowLeft, Download, FileText, Pencil } from "lucide-react";
 import { eq, sql } from "drizzle-orm";
 
 import { checkPermission } from "@/lib/auth/guards";
@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { docxToHtml } from "@/features/library/docx";
-import { getResourceForViewer } from "@/features/library/queries";
+import { getLibraryCategories, getResourceForViewer } from "@/features/library/queries";
+import { ResourceFormDialog } from "@/features/library/components/resource-form-dialog";
 import { DOCX_MIME, LIBRARY_BUCKET, PDF_MIME, RESOURCE_TYPE_LABELS, formatKind, formatSize } from "@/features/library/schemas";
 
 /** Au-delà, la conversion DOCX → HTML serait trop lourde pour une requête : on propose le téléchargement. */
@@ -55,6 +56,9 @@ export default async function LibraryResourcePage({ params }: { params: Promise<
   const canManage = check.context.isAdmin || check.context.permissions.has("training.manage");
   const resource = await getResourceForViewer(check.organization.organization.id, id, canManage);
   if (!resource) notFound();
+  // Modification réservée à l'administrateur / propriétaire de l'église.
+  const canEdit = check.context.isAdmin;
+  const categories = canEdit ? await getLibraryCategories(check.organization.organization.id) : [];
 
   await db
     .update(libraryResources)
@@ -112,6 +116,19 @@ export default async function LibraryResourcePage({ params }: { params: Promise<
                 Bibliothèque
               </Link>
             </Button>
+            {canEdit && (
+              <ResourceFormDialog
+                organizationId={check.organization.organization.id}
+                categories={categories}
+                resource={resource}
+                trigger={
+                  <Button type="button" variant="secondary" size="sm">
+                    <Pencil className="size-4" />
+                    Modifier
+                  </Button>
+                }
+              />
+            )}
             <Button asChild size="sm">
               <a href={`${fileUrl}?download=1`}>
                 <Download className="size-4" />
