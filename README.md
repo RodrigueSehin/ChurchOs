@@ -198,6 +198,30 @@ navigateur → Storage, téléchargement par URL signée).
 
 Vérifié par typecheck/lint/build uniquement.
 
+### Bibliothèque (`/library`)
+
+Entrée « Bibliothèque » sous Formations. Page d'après la maquette : bannière (Psaumes 119:105) avec
+« Catégories » (gestion) et « Ajouter une ressource », 4 KPI (ressources avec variation vs mois dernier,
+catégories, téléchargements, note moyenne), onglets par type (Livres, Études bibliques, Enseignements,
+Documents, Vidéos, Audios), recherche (titre, auteur, description, tags), filtres catégorie / format / tri
++ « Mes favoris », cartes (couverture, catégorie, auteur, format · taille, vues, téléchargements, favori,
+téléchargement, menu : noter 1–5 / supprimer), colonne latérale Catégories (avec compteurs) et Ressources
+populaires. Droits : `training.view` pour consulter, `training.manage` pour ajouter/supprimer/gérer les
+catégories ; les non-gestionnaires ne voient que les ressources publiées et « visibles par tous les membres ».
+**Migration à appliquer** : [`db/migrations/2026-10-06-library.sql`](db/migrations/2026-10-06-library.sql)
+(idempotente, incluse dans `db/schema.sql`) : tables `library_categories`, `library_resources`,
+`library_bookmarks`, `library_ratings`, buckets `churchos-library` (privé, fichiers jusqu'à 100 Mo, URL
+signées) et `churchos-library-covers` (public, 5 Mo). Les fichiers sont envoyés directement du navigateur vers
+Storage. Supabase plafonne aussi la taille par fichier au niveau du projet (Storage > Settings) : l'augmenter
+si 100 Mo est refusé.
+
+- Écarts avec la maquette : pas de bouton « Filtres » séparé (les filtres sont affichés), pas de durée
+  des vidéos/audios (le formulaire n'en contient pas : la taille est affichée), « Année de publication » est un
+  champ date, pas de modification d'une ressource existante (ajout / suppression seulement).
+- Le compteur de vues s'incrémente à l'ouverture, celui de téléchargements au téléchargement.
+
+Vérifié par typecheck/lint/build uniquement.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
