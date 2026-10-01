@@ -43,8 +43,7 @@ export default async function EventsPage({
         <PageHero
           title="Événements"
           description="Organisez et suivez tous les événements de votre église."
-          quote="Que tout se fasse avec bienséance et avec ordre."
-          verseRef="1 Corinthiens 14:40"
+          verseContext="events"
         />
         <PermissionDenied requiredPermission="events.view" />
       </div>
@@ -91,8 +90,7 @@ export default async function EventsPage({
       <PageHero
         title="Événements"
         description="Organisez et suivez tous les événements de votre église."
-        quote="Que tout se fasse avec bienséance et avec ordre."
-        verseRef="1 Corinthiens 14:40"
+        verseContext="events"
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

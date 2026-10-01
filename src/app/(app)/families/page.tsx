@@ -33,8 +33,7 @@ export default async function FamiliesPage({
         <PageHero
           title="Familles"
           description="Regroupez les membres par familles pour une meilleure communion et un suivi pastoral efficace."
-          quote="Moi et ma maison, nous servirons l'Éternel."
-          verseRef="Josué 24:15"
+          verseContext="families"
         />
         <PermissionDenied requiredPermission="members.view" />
       </div>
@@ -74,8 +73,7 @@ export default async function FamiliesPage({
       <PageHero
         title="Familles"
         description="Regroupez les membres par familles pour une meilleure communion et un suivi pastoral efficace."
-        quote="Moi et ma maison, nous servirons l'Éternel."
-        verseRef="Josué 24:15"
+        verseContext="families"
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">

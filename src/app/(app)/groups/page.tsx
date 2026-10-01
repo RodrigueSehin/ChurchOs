@@ -32,8 +32,7 @@ export default async function GroupsPage({
         <PageHero
           title="Groupes"
           description="Organisez vos groupes, équipes et cellules pour une communauté plus forte et engagée."
-          quote="Là où deux ou trois sont assemblés en mon nom, je suis au milieu d'eux."
-          verseRef="Matthieu 18:20"
+          verseContext="groups"
         />
         <PermissionDenied requiredPermission="members.view" />
       </div>
@@ -69,8 +68,7 @@ export default async function GroupsPage({
       <PageHero
         title="Groupes"
         description="Organisez vos groupes, équipes et cellules pour une communauté plus forte et engagée."
-        quote="Là où deux ou trois sont assemblés en mon nom, je suis au milieu d'eux."
-        verseRef="Matthieu 18:20"
+        verseContext="groups"
         cta={{ icon: HeartHandshake, line1: "Des groupes vivants", line2: "pour des vies transformées." }}
       />
 

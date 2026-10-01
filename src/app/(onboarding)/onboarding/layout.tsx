@@ -1,5 +1,7 @@
+import { connection } from "next/server";
+
 import { AuthPageShell } from "@/components/shared/auth-page-shell";
-import { ONBOARDING_HERO } from "@/components/shared/auth-hero-presets";
+import { getOnboardingHero } from "@/components/shared/auth-hero-presets";
 import { OnboardingSteps } from "@/features/onboarding/components/onboarding-steps";
 
 /**
@@ -8,9 +10,10 @@ import { OnboardingSteps } from "@/features/onboarding/components/onboarding-ste
  * chaque page — voir la note dans `admin/page.tsx`). Pas de garde ici pour ne pas bloquer les
  * deux premières étapes.
  */
-export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
+export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
+  await connection(); // rendu à chaque requête : le verset du jour ne doit pas être figé au build
   return (
-    <AuthPageShell hero={ONBOARDING_HERO} contentClassName="max-w-5xl">
+    <AuthPageShell hero={getOnboardingHero()} contentClassName="max-w-5xl">
       <div className="mb-8">
         <OnboardingSteps />
       </div>

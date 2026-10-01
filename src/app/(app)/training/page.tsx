@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Award, BookOpen, GraduationCap, Quote, TrendingUp, Users } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { getDailyVerse } from "@/lib/verses";
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
@@ -36,8 +37,7 @@ function n(value: number) {
 const HERO = {
   title: "Cours & Discipolat",
   description: "Grandissez dans la connaissance de la Parole et devenez des disciples.",
-  quote: "Allez, faites de toutes les nations des disciples…",
-  verseRef: "Matthieu 28:19",
+  verseContext: "training" as const,
 };
 
 export default async function TrainingPage({
@@ -62,6 +62,7 @@ export default async function TrainingPage({
   const organizationId = check.organization.organization.id;
   const canCreate = check.context.permissions.has("training.manage") || check.context.isAdmin;
 
+  const sideVerse = getDailyVerse("training", 1);
   const personId = await getPersonIdForUser(organizationId, check.user.email);
 
   const [kpis, cards, overview, recent, instructors, people, categories] = await Promise.all([
@@ -169,8 +170,8 @@ export default async function TrainingPage({
                 <Quote className="size-4" />
               </span>
               <div className="text-sm italic text-slate-600">
-                « Croissez dans la grâce et dans la connaissance de notre Seigneur et Sauveur Jésus-Christ. »
-                <p className="mt-1 text-xs not-italic text-slate-400">2 Pierre 3:18</p>
+                « {sideVerse.text} »
+                <p className="mt-1 text-xs not-italic text-slate-400">{sideVerse.ref}</p>
               </div>
             </CardContent>
           </Card>

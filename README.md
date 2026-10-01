@@ -232,6 +232,20 @@ l'identique par l'aperçu ; le téléchargement donne le fichier d'origine.
 
 Vérifié par typecheck/lint/build uniquement.
 
+### Versets du jour
+
+Chaque bannière de page affiche un verset (Louis Segond) qui change chaque jour **et** correspond au
+sujet de la page : `src/lib/verses.ts` contient une liste thématique par contexte (membres, familles,
+visiteurs, groupes, pastoral, prière, visites, conseil pastoral, ministères, ouvriers, services,
+plannings, événements, inscriptions, calendrier, présences, dons, finances, formations, certifications,
+bibliothèque, tableau de bord, connexion, création d'église — 7 à 8 versets chacune).
+`getDailyVerse(contexte, slot?)` choisit de façon déterministe (jour UTC = heure d'Abidjan, décalage propre
+à chaque contexte) : même verset toute la journée pour tout le monde, rien à stocker. `PageHero` prend
+`verseContext` ; les versets secondaires (cartes latérales de Services, Prière, Ouvriers, Formations)
+utilisent `slot = 1` pour différer du verset de la bannière. Les layouts de connexion/création d'église
+appellent `connection()` pour ne pas figer le verset au build. Pour ajouter un verset, l'ajouter à la
+liste du contexte concerné.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.

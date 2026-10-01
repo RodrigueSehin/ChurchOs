@@ -32,8 +32,7 @@ export default async function VisitsPage({
         <PageHero
           title="Visites pastorales"
           description="Planifiez, suivez et enregistrez vos visites pour rester proche de votre communauté."
-          quote="J'étais malade, et vous m'avez visité."
-          verseRef="Matthieu 25:36"
+          verseContext="visits"
         />
         <PermissionDenied requiredPermission="visits.view" />
       </div>
@@ -70,8 +69,7 @@ export default async function VisitsPage({
       <PageHero
         title="Visites pastorales"
         description="Planifiez, suivez et enregistrez vos visites pour rester proche de votre communauté."
-        quote="J'étais malade, et vous m'avez visité."
-        verseRef="Matthieu 25:36"
+        verseContext="visits"
         cta={{ icon: HeartHandshake, line1: "Aller vers les autres", line2: "comme Christ nous a aimés." }}
       />
 

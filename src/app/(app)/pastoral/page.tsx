@@ -33,8 +33,7 @@ export default async function PastoralPage({
         <PageHero
           title="Suivi pastoral"
           description="Accompagnez, écoutez et soutenez vos membres dans leur marche avec Dieu."
-          quote="Portez les fardeaux les uns des autres, et vous accomplirez ainsi la loi de Christ."
-          verseRef="Galates 6:2"
+          verseContext="pastoral"
         />
         <PermissionDenied requiredPermission="pastoral.view" />
       </div>
@@ -78,8 +77,7 @@ export default async function PastoralPage({
       <PageHero
         title="Suivi pastoral"
         description="Accompagnez, écoutez et soutenez vos membres dans leur marche avec Dieu."
-        quote="Portez les fardeaux les uns des autres, et vous accomplirez ainsi la loi de Christ."
-        verseRef="Galates 6:2"
+        verseContext="pastoral"
         cta={{ icon: HeartHandshake, line1: "Un cœur qui écoute,", line2: "une église qui grandit." }}
       />
 

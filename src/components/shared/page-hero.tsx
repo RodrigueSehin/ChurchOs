@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 import churchImage from "@/img/eglise.png";
+import { getDailyVerse, type VerseContext } from "@/lib/verses";
 
 interface PageHeroCta {
   icon: React.ElementType;
@@ -11,8 +12,8 @@ interface PageHeroCta {
 interface PageHeroProps {
   title: string;
   description: string;
-  quote: string;
-  verseRef: string;
+  /** Contexte de la page : le verset affiché est celui du jour, tiré de la liste thématique de ce contexte. */
+  verseContext: VerseContext;
   cta?: PageHeroCta;
   /** Boutons d'action (ex. « Nouveau cours »), alignés en bas à droite de la bannière. */
   actions?: React.ReactNode;
@@ -25,7 +26,9 @@ interface PageHeroProps {
  * différentes captures `Entête_*.png` : structure identique (titre/description/verset/CTA
  * optionnel), seul le contenu change par page.
  */
-export function PageHero({ title, description, quote, verseRef, cta: Cta, actions }: PageHeroProps) {
+export function PageHero({ title, description, verseContext, cta: Cta, actions }: PageHeroProps) {
+  const verse = getDailyVerse(verseContext);
+
   return (
     <div className="relative isolate overflow-hidden rounded-2xl">
       <Image src={churchImage} alt="" fill priority className="-z-10 object-cover object-right" sizes="100vw" />
@@ -40,9 +43,9 @@ export function PageHero({ title, description, quote, verseRef, cta: Cta, action
 
           <div className="text-right text-navy/80 sm:pr-36">
             <p className="italic">
-              « {quote} »
+              « {verse.text} »
             </p>
-            <p className="mt-1 text-sm text-navy/50">{verseRef}</p>
+            <p className="mt-1 text-sm text-navy/50">{verse.ref}</p>
           </div>
         </div>
 

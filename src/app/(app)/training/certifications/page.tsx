@@ -37,8 +37,7 @@ function formatDate(value: string | null) {
 const HERO = {
   title: "Certifications",
   description: "Suivez les certifications et les reconnaissances des membres de votre église.",
-  quote: "Reste ferme dans ce que tu as appris et dont tu as été convaincu.",
-  verseRef: "2 Timothée 3:14",
+  verseContext: "certifications" as const,
 };
 
 export default async function CertificationsPage({

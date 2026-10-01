@@ -1,6 +1,7 @@
 import { CalendarCheck, CalendarClock, Percent, UsersRound } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { getDailyVerse } from "@/lib/verses";
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
@@ -43,8 +44,7 @@ export default async function ServicesPage({
         <PageHero
           title="Services"
           description="Gérez les différents services de l'église et organisez la vie communautaire."
-          quote="Tout se fasse avec bienséance et avec ordre."
-          verseRef="1 Corinthiens 14:40"
+          verseContext="services"
         />
         <PermissionDenied requiredPermission="services.view" />
       </div>
@@ -78,13 +78,14 @@ export default async function ServicesPage({
 
   const hasFilters = Boolean(params.q || params.status || params.serviceTypeId);
 
+  const sideVerse = getDailyVerse("services", 1);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHero
         title="Services"
         description="Gérez les différents services de l'église et organisez la vie communautaire."
-        quote="Tout se fasse avec bienséance et avec ordre."
-        verseRef="1 Corinthiens 14:40"
+        verseContext="services"
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -198,9 +199,9 @@ export default async function ServicesPage({
           <Card>
             <CardContent className="pt-5">
               <p className="italic text-slate-600">
-                « Car là où deux ou trois sont assemblés en mon nom, je suis au milieu d&apos;eux. »
+                « {sideVerse.text} »
               </p>
-              <p className="mt-2 text-xs text-slate-400">Matthieu 18:20</p>
+              <p className="mt-2 text-xs text-slate-400">{sideVerse.ref}</p>
             </CardContent>
           </Card>
         </div>

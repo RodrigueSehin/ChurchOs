@@ -31,8 +31,7 @@ export default async function PlanningPage({
         <PageHero
           title="Plannings"
           description="Créneaux de service et affectation des ouvriers."
-          quote="Il y a un temps pour chaque chose sous les cieux."
-          verseRef="Ecclésiaste 3:1"
+          verseContext="planning"
         />
         <PermissionDenied requiredPermission="planning.view" />
       </div>
@@ -58,8 +57,7 @@ export default async function PlanningPage({
       <PageHero
         title="Plannings"
         description="Créneaux de service et affectation des ouvriers — les conflits d'horaire sont détectés automatiquement."
-        quote="Il y a un temps pour chaque chose sous les cieux."
-        verseRef="Ecclésiaste 3:1"
+        verseContext="planning"
         cta={{ icon: CalendarClock, line1: "Un temps pour chaque chose,", line2: "et chaque chose en son temps." }}
       />
 

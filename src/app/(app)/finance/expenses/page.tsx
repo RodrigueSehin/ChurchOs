@@ -55,8 +55,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     <PageHero
       title="Dépenses"
       description="Gérez les dépenses de votre église avec transparence et efficacité."
-      quote="Que tout se fasse avec bienséance et avec ordre."
-      verseRef="1 Corinthiens 14:40"
+      verseContext="finance"
     />
   );
 
