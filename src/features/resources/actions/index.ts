@@ -26,7 +26,42 @@ function parseResourceForm(formData: FormData) {
     quantity: formData.get("quantity"),
     location: formData.get("location"),
     status: formData.get("status"),
+    capacity: formData.get("capacity"),
+    roomType: formData.get("roomType"),
+    category: formData.get("category"),
+    roomId: formData.get("roomId"),
   });
+}
+
+/** Champs propres aux salles / équipements, fusionnés dans `metadata` (les photos existantes sont conservées). */
+async function buildMetadata(organizationId: string, existing: unknown, v: ReturnType<typeof resourceSchema.parse>) {
+  const meta: Record<string, unknown> = { ...((existing ?? {}) as Record<string, unknown>) };
+  const capacity = Number(v.capacity);
+  if (v.type === "room") {
+    if (Number.isInteger(capacity) && capacity > 0) meta.capacity = capacity;
+    else delete meta.capacity;
+    if (v.roomType.trim()) meta.roomType = v.roomType.trim();
+    else delete meta.roomType;
+  } else {
+    delete meta.capacity;
+    delete meta.roomType;
+  }
+  if (v.type === "equipment") {
+    if (v.category.trim()) meta.category = v.category.trim();
+    else delete meta.category;
+    if (v.roomId.trim()) {
+      const [room] = await db
+        .select({ id: resources.id })
+        .from(resources)
+        .where(and(eq(resources.id, v.roomId.trim()), eq(resources.organizationId, organizationId), eq(resources.type, "room")));
+      if (!room) return null;
+      meta.roomId = room.id;
+    } else delete meta.roomId;
+  } else {
+    delete meta.category;
+    delete meta.roomId;
+  }
+  return meta;
 }
 
 export async function createResource(_prev: ResourceActionState, formData: FormData): Promise<ResourceActionState> {
@@ -37,8 +72,12 @@ export async function createResource(_prev: ResourceActionState, formData: FormD
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
 
+  const metadata = await buildMetadata(check.organization.organization.id, {}, v);
+  if (!metadata) return { error: "Salle d'affectation introuvable." };
+
   const supabase = await createClient();
   const { error } = await supabase.from("resources").insert({
+    metadata,
     organization_id: check.organization.organization.id,
     name: v.name,
     type: v.type,
@@ -65,10 +104,17 @@ export async function updateResource(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
 
+  const organizationId = check.organization.organization.id;
+  const [current] = await db.select({ metadata: resources.metadata }).from(resources).where(and(eq(resources.id, resourceId), eq(resources.organizationId, organizationId)));
+  if (!current) return { error: "Ressource introuvable." };
+  const metadata = await buildMetadata(organizationId, current.metadata, v);
+  if (!metadata) return { error: "Salle d'affectation introuvable." };
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("resources")
     .update({
+      metadata,
       name: v.name,
       type: v.type,
       description: orNull(v.description),
