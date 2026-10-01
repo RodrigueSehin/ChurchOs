@@ -161,7 +161,7 @@ async function FeedTab({
             <FeedToolbar view={view} initialSearch={search ?? ""} counts={feed.counts} />
             <div className="flex flex-wrap gap-2 text-xs">
               {canSend && (
-                <Link href="/communication?tab=compose" className="rounded-md bg-slate-100 px-2.5 py-1 font-medium text-navy hover:bg-slate-200">
+                <Link href="/communication/messages" className="rounded-md bg-slate-100 px-2.5 py-1 font-medium text-navy hover:bg-slate-200">
                   Composer un message
                 </Link>
               )}

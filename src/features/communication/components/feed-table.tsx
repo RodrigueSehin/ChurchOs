@@ -114,7 +114,7 @@ function FeedRow({
                 {item.title}
               </button>
             ) : (
-              <Link href="/communication?tab=history" className="block max-w-xs truncate font-semibold text-navy hover:underline">
+              <Link href="/communication/messages" className="block max-w-xs truncate font-semibold text-navy hover:underline">
                 {item.title}
               </Link>
             )}

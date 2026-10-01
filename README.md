@@ -278,6 +278,30 @@ réseaux sociaux.
 et [`2026-10-09-announcement-composer.sql`](db/migrations/2026-10-09-announcement-composer.sql) (idempotentes,
 incluses dans `db/schema.sql`).
 
+### Messages (SMS/Email) (`/communication/messages`) et Médias (`/communication/media`)
+
+Menu Communication : **Annonces**, **Messages (SMS/Email)**, **Médias**. La page Messages suit la maquette : 3 KPI
+(messages envoyés avec variation vs mois dernier, destinataires uniques, taux de délivrance), onglets Tous / SMS /
+Email / Brouillons / Planifiés (+ lien Modèles, recherche), tableau paginé (titre, destinataires, canal, date, statut,
+statistiques ✓ / ✗, menu Modifier / Envoyer maintenant / Dupliquer / Supprimer) et composeur « Nouveau message » en 3
+étapes : destinataires (tous les membres actifs, groupes / ministères, liste personnalisée de personnes ; compteur de
+destinataires joignables), contenu (modèle, compteur 160 caractères pour un SMS, variables `{{prenom}}` / `{{nom}}`),
+planification (maintenant ou date + heure) et boutons Brouillon / Envoyer. **Aucune migration** : tout repose sur
+les tables `messages` et `notifications` existantes (une ligne `notifications` par destinataire).
+
+- **SMS** : API REST Twilio (`src/lib/sms/twilio.ts`). Variables à ajouter : `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+  `TWILIO_FROM` (ou `TWILIO_MESSAGING_SERVICE_SID`) et, si besoin, `SMS_DEFAULT_COUNTRY_CODE` (225 par défaut) pour
+  compléter les numéros locaux. Sans elles, la page affiche un bandeau et l'envoi est refusé (le message reste en brouillon).
+- **Email** : Resend (`RESEND_API_KEY`), comme avant.
+- **Messages planifiés** : aucun planificateur interne. Appeler `GET /api/cron/send-messages` avec l'en-tête
+  `Authorization: Bearer $CRON_SECRET` (variable `CRON_SECRET` à définir) toutes les ~5 minutes (Vercel Cron ou autre) ; sans
+  cela, un message planifié reste en attente (« Envoyer maintenant » le déclenche à la main). L'envoi est protégé contre le double envoi.
+- Le taux de délivrance compte les envois acceptés par le fournisseur (pas de webhook de remise).
+- **Médias** : galerie en lecture seule des images, vidéos et documents joints aux annonces (filtre par type).
+- Écarts avec la maquette : pas de bouton « Filtres » séparé ; pas de pagination par taille de page.
+
+Vérifié par typecheck/lint/build uniquement — jamais essayé avec de vrais comptes Twilio / Resend.
+
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
 Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de
@@ -297,6 +321,7 @@ formulaire d'annonce (seuls Facebook, Instagram et le partage WhatsApp restent).
 | `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces (3 au 9 oct.) |
 | `db/migrations/2026-10-07-library-pdf-docx.sql` | SQL Editor Supabase | Seulement si `2026-10-06-library.sql` avait été exécutée avant la restriction PDF/DOCX |
 | `SOCIAL_TOKEN_KEY` (`openssl rand -base64 32`) | Variables Vercel | Connecter Facebook / Instagram (Paramètres > Réseaux sociaux) |
+| `TWILIO_*`, `CRON_SECRET` + appel périodique de `/api/cron/send-messages` | Variables Vercel / planificateur | Envoi de SMS et messages planifiés |
 
 Migrations plus anciennes (mai–sept.) : `db/migrations/*.sql` par ordre de date, toutes incluses dans
 `db/schema.sql`. Une page dont la migration manque affiche un message explicite (voir ci-dessus).
@@ -306,8 +331,7 @@ Migrations plus anciennes (mai–sept.) : `db/migrations/*.sql` par ordre de dat
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
 - **Tout ce qui est décrit comme « vérifié par typecheck/lint/build uniquement » ci-dessus** (Training, Certifications, Bibliothèque, Annonces, publication Facebook/Instagram, versets du jour) est à tester en conditions réelles ; la publication Meta n'a jamais été essayée avec de vrais jetons.
 - Refonte selon les maquettes des modules restants : Documents, Resources, Analytics, Reports,
-  Settings, AI, Teams. Entrées de menu de la maquette pas encore construites : « Messages
-  (SMS/Email) » et « Médias » (Communication).
+  Settings, AI, Teams. 
 - Finir la vérification live des Phases 14 et 15, puis les marquer ✅.
 - Reporté volontairement : paiements mobiles (Orange Money, MTN, Wave), RAG/pgvector, streaming des
   réponses IA, `lib/feature-flags/`, alertes de paiement en retard, publication YouTube (l'API ne

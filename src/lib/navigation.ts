@@ -27,6 +27,8 @@ import {
   Library,
   Share2,
   Megaphone,
+  MessageSquareText,
+  Images,
   FolderOpen,
   Warehouse,
   PieChart,
@@ -108,7 +110,11 @@ export const navSections: NavSection[] = [
   },
   {
     label: "Communication",
-    items: [{ title: "Annonces & messages", href: "/communication", icon: Megaphone, phase: 11 }],
+    items: [
+      { title: "Annonces", href: "/communication", icon: Megaphone, phase: 11 },
+      { title: "Messages (SMS/Email)", href: "/communication/messages", icon: MessageSquareText, phase: 11 },
+      { title: "Médias", href: "/communication/media", icon: Images, phase: 11 },
+    ],
   },
   {
     label: "Ressources",
