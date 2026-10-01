@@ -7,8 +7,8 @@ import { Eye, Mail, MessageSquare, Megaphone, MoreVertical, Pencil, Trash2, User
 
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { deleteAnnouncement, markAnnouncementRead, updateAnnouncement } from "@/features/communication/actions";
-import { AnnouncementFormDialog } from "@/features/communication/components/announcement-form-dialog";
+import { RichText } from "@/components/shared/rich-text";
+import { deleteAnnouncement, markAnnouncementRead } from "@/features/communication/actions";
 import type { FeedItem } from "@/features/communication/queries";
 import { ANNOUNCEMENT_STATUS_LABELS } from "@/features/communication/schemas";
 import { cn } from "@/lib/utils";
@@ -26,18 +26,14 @@ function formatDate(date: Date) {
   return { d, t };
 }
 
-type AudienceOptions = { groups: { id: string; name: string }[]; ministries: { id: string; name: string }[] };
-
 export function FeedTable({
   rows,
   canManage,
   isAdmin,
-  audienceOptions,
 }: {
   rows: FeedItem[];
   canManage: boolean;
   isAdmin: boolean;
-  audienceOptions: AudienceOptions;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -55,7 +51,7 @@ export function FeedTable({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <FeedRow key={`${row.kind}-${row.id}`} item={row} canManage={canManage} isAdmin={isAdmin} audienceOptions={audienceOptions} />
+            <FeedRow key={`${row.kind}-${row.id}`} item={row} canManage={canManage} isAdmin={isAdmin} />
           ))}
         </tbody>
       </table>
@@ -67,12 +63,10 @@ function FeedRow({
   item,
   canManage,
   isAdmin,
-  audienceOptions,
 }: {
   item: FeedItem;
   canManage: boolean;
   isAdmin: boolean;
-  audienceOptions: AudienceOptions;
 }) {
   const router = useRouter();
   const [reading, setReading] = useState(false);
@@ -168,17 +162,10 @@ function FeedRow({
                   Lire
                 </button>
                 {canManage && item.announcement && (
-                  <AnnouncementFormDialog
-                    action={updateAnnouncement.bind(null, item.id)}
-                    announcement={item.announcement}
-                    audienceOptions={audienceOptions}
-                    trigger={
-                      <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
-                        <Pencil className="size-4" />
-                        Modifier
-                      </button>
-                    }
-                  />
+                  <Link href={`/communication/${item.id}/edit`} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
+                    <Pencil className="size-4" />
+                    Modifier
+                  </Link>
                 )}
                 {isAdmin && (
                   <ConfirmDialog
@@ -213,7 +200,12 @@ function FeedRow({
                 // eslint-disable-next-line @next/next/no-img-element -- image du bucket public
                 <img src={item.imageUrl} alt="" className="mb-3 max-h-64 w-full rounded-lg object-cover" />
               )}
-              <p className="whitespace-pre-wrap text-sm text-slate-700">{item.announcement?.content}</p>
+              <RichText text={item.announcement?.content ?? ""} className="space-y-1 text-sm text-slate-700" />
+              {item.announcement?.attachmentUrl && (
+                <a href={item.announcement.attachmentUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-sm text-primary underline">
+                  {item.announcement.attachmentName ?? "Pièce jointe"}
+                </a>
+              )}
             </DialogContent>
           </Dialog>
         )}

@@ -6,17 +6,22 @@ import { and, eq, inArray } from "drizzle-orm";
 import { checkPermission } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/client";
-import { groups, ministries, people } from "@/lib/db/schema";
+import { announcementSocialPosts, groups, ministries, people, socialConnections } from "@/lib/db/schema";
+import { decryptToken } from "@/lib/social/crypto";
+import { publishToFacebook, publishToInstagram } from "@/lib/social/graph";
 import { EMAIL_FROM, getResendClient } from "@/lib/email/resend";
 import {
   ANNOUNCEMENT_IMAGE_BUCKET,
-  ANNOUNCEMENT_IMAGE_MAX_BYTES,
-  ANNOUNCEMENT_IMAGE_MIME_EXTENSIONS,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_MIME,
+  IMAGE_MAX_BYTES,
   announcementImagePath,
   announcementSchema,
+  markdownToPlain,
   messageSchema,
   templateSchema,
   type Audience,
+  type AudienceTarget,
 } from "@/features/communication/schemas";
 
 export interface CommunicationActionState {
@@ -28,162 +33,240 @@ function orNull(value: string) {
   return value.trim() === "" ? null : value.trim();
 }
 
-function parseAnnouncementForm(formData: FormData) {
-  return announcementSchema.safeParse({
-    title: formData.get("title"),
-    content: formData.get("content"),
-    status: formData.get("status"),
-    publishAt: formData.get("publishAt"),
-    expiresAt: formData.get("expiresAt"),
-    audience: formData.get("audience"),
-  });
-}
-
-type Supabase = Awaited<ReturnType<typeof createClient>>;
-
-/** `all` | `group:<uuid>` | `ministry:<uuid>` → filtre stocké (nom inclus : affichage sans jointure). */
-async function resolveAudience(organizationId: string, raw: string): Promise<Audience | null> {
-  if (raw === "all") return { type: "all" };
-  const [kind, id] = raw.split(":");
-  if (!id) return null;
-  if (kind === "group") {
-    const [row] = await db.select({ name: groups.name }).from(groups).where(and(eq(groups.id, id), eq(groups.organizationId, organizationId)));
-    return row ? { type: "group", id, name: row.name } : null;
+/** `group:<uuid>` / `ministry:<uuid>` → cible nommée (le nom est stocké : affichage sans jointure). */
+async function resolveAudience(organizationId: string, ids: string[]): Promise<Audience | null> {
+  if (ids.includes("all")) return { type: "all" };
+  const targets: AudienceTarget[] = [];
+  for (const raw of ids) {
+    const [kind, id] = raw.split(":");
+    if (!id) return null;
+    if (kind === "group") {
+      const [row] = await db.select({ name: groups.name }).from(groups).where(and(eq(groups.id, id), eq(groups.organizationId, organizationId)));
+      if (!row) return null;
+      targets.push({ type: "group", id, name: row.name });
+    } else if (kind === "ministry") {
+      const [row] = await db
+        .select({ name: ministries.name })
+        .from(ministries)
+        .where(and(eq(ministries.id, id), eq(ministries.organizationId, organizationId)));
+      if (!row) return null;
+      targets.push({ type: "ministry", id, name: row.name });
+    } else {
+      return null;
+    }
   }
-  if (kind === "ministry") {
-    const [row] = await db
-      .select({ name: ministries.name })
-      .from(ministries)
-      .where(and(eq(ministries.id, id), eq(ministries.organizationId, organizationId)));
-    return row ? { type: "ministry", id, name: row.name } : null;
-  }
-  return null;
+  return { type: "targets", targets };
 }
 
-function imageFile(formData: FormData) {
-  const file = formData.get("image");
-  return file instanceof File && file.size > 0 ? file : undefined;
+export interface MediaRef {
+  path: string;
+  mime: string;
+  size: number;
 }
 
-function validateImage(file: File | undefined) {
-  if (!file) return null;
-  if (!ANNOUNCEMENT_IMAGE_MIME_EXTENSIONS[file.type]) return "Image : JPG, PNG ou WebP uniquement.";
-  if (file.size > ANNOUNCEMENT_IMAGE_MAX_BYTES) return "Image trop volumineuse (4 Mo maximum).";
-  return null;
+export interface SocialResult {
+  provider: string;
+  label: string;
+  status: "published" | "scheduled" | "failed";
+  error?: string;
 }
 
-async function uploadAnnouncementImage(supabase: Supabase, organizationId: string, file: File) {
-  const path = `${organizationId}/${crypto.randomUUID()}.${ANNOUNCEMENT_IMAGE_MIME_EXTENSIONS[file.type]}`;
-  const { error } = await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).upload(path, file, { contentType: file.type });
-  if (error) return { error: `Échec du téléversement de l'image : ${error.message}` };
-  return { path, url: supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl };
+export interface SaveAnnouncementState extends CommunicationActionState {
+  announcementId?: string;
+  social?: SocialResult[];
 }
 
-export async function createAnnouncement(_prev: CommunicationActionState, formData: FormData): Promise<CommunicationActionState> {
+const IMAGE_MIME = ["image/jpeg", "image/png", "image/webp"];
+
+function publicUrl(supabase: Awaited<ReturnType<typeof createClient>>, path: string) {
+  return supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+/**
+ * Crée ou modifie une annonce (formulaire « Nouvelle annonce »). Les médias (image 5 Mo, vidéo/document
+ * 50 Mo) ont déjà été envoyés DIRECTEMENT du navigateur vers Storage — une Server Action ne peut pas les
+ * porter ; leurs chemins sont revérifiés ici (préfixe de l'organisation, type, taille) et les fichiers
+ * orphelins sont retirés en cas d'échec. Les publications sociales sont tentées APRÈS l'enregistrement :
+ * un échec chez Meta est consigné par compte (et renvoyé) sans annuler l'annonce.
+ */
+export async function saveAnnouncement(input: {
+  id?: string;
+  fields: Record<string, unknown>;
+  image?: MediaRef | null;
+  removeImage?: boolean;
+  attachment?: (MediaRef & { name: string; type: "video" | "document" }) | null;
+  removeAttachment?: boolean;
+}): Promise<SaveAnnouncementState> {
   const check = await checkPermission("communication.manage");
-  if (!check.allowed) return { error: "Vous n'avez pas la permission de créer une annonce." };
-
-  const parsed = parseAnnouncementForm(formData);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
-  const v = parsed.data;
-  const image = imageFile(formData);
-  const imageError = validateImage(image);
-  if (imageError) return { error: imageError };
+  if (!check.allowed) return { error: "Vous n'avez pas la permission de gérer les annonces." };
 
   const organizationId = check.organization.organization.id;
-  const audience = await resolveAudience(organizationId, v.audience);
-  if (!audience) return { error: "Destinataires introuvables." };
-
   const supabase = await createClient();
-  let uploaded: { path: string; url: string } | undefined;
-  if (image) {
-    const res = await uploadAnnouncementImage(supabase, organizationId, image);
-    if ("error" in res && res.error) return { error: res.error };
-    uploaded = res as { path: string; url: string };
+  const discardNew = async () => {
+    const paths = [input.image?.path, input.attachment?.path].filter((p): p is string => Boolean(p));
+    if (paths.length) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove(paths);
+  };
+  const fail = async (error: string): Promise<SaveAnnouncementState> => {
+    await discardNew();
+    return { error };
+  };
+
+  const parsed = announcementSchema.safeParse(input.fields);
+  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Formulaire invalide");
+  const v = parsed.data;
+
+  for (const media of [input.image, input.attachment]) {
+    if (media && (!media.path.startsWith(`${organizationId}/`) || media.path.includes(".."))) return fail("Chemin de fichier invalide.");
+  }
+  if (input.image && (!IMAGE_MIME.includes(input.image.mime) || input.image.size <= 0 || input.image.size > IMAGE_MAX_BYTES)) {
+    return fail("Image : JPG, PNG ou WebP, 5 Mo maximum.");
+  }
+  if (input.attachment) {
+    const a = input.attachment;
+    if (!ATTACHMENT_MIME[a.type]?.includes(a.mime) || a.size <= 0 || a.size > ATTACHMENT_MAX_BYTES) {
+      return fail("Fichier joint : vidéo MP4 ou document PDF/DOCX, 50 Mo maximum.");
+    }
   }
 
-  const { error } = await supabase.from("announcements").insert({
-    organization_id: organizationId,
+  const audience = await resolveAudience(organizationId, v.audience);
+  if (!audience) return fail("Destinataires introuvables.");
+
+  // Statut : brouillon, publication immédiate, ou programmation (date future).
+  const now = Date.now();
+  const requestedAt = v.publishAt ? new Date(v.publishAt) : null;
+  if (requestedAt && Number.isNaN(requestedAt.getTime())) return fail("Date de publication invalide.");
+  const scheduled = v.mode === "publish" && requestedAt !== null && requestedAt.getTime() > now + 60_000;
+  const status = v.mode === "draft" ? "draft" : scheduled ? "scheduled" : "published";
+  const publishAt = v.mode === "draft" ? requestedAt : scheduled ? requestedAt : new Date(now);
+
+  // Comptes sociaux ciblés : appartiennent à l'organisation ; règles propres à chaque réseau.
+  let connections: (typeof socialConnections.$inferSelect)[] = [];
+  if (v.socialConnectionIds.length > 0) {
+    if (v.mode !== "publish") return fail("Les réseaux sociaux ne sont utilisables qu'à la publication (pas en brouillon).");
+    connections = await db
+      .select()
+      .from(socialConnections)
+      .where(and(eq(socialConnections.organizationId, organizationId), inArray(socialConnections.id, v.socialConnectionIds)));
+    if (connections.length !== new Set(v.socialConnectionIds).size) return fail("Compte de réseau social introuvable.");
+    const hasImage = Boolean(input.image) || (input.id ? !input.removeImage : false);
+    if (connections.some((c) => c.provider === "instagram")) {
+      if (scheduled) return fail("Instagram ne permet pas la programmation par l'API : publiez maintenant ou décochez Instagram.");
+      if (!hasImage) return fail("Instagram exige une image : ajoutez-en une ou décochez Instagram.");
+    }
+    if (scheduled && requestedAt) {
+      const delta = requestedAt.getTime() - now;
+      if (delta < 10 * 60_000 || delta > 30 * 24 * 3600_000) {
+        return fail("Facebook ne programme que de 10 minutes à 30 jours à l'avance.");
+      }
+    }
+  }
+
+  let existing: { image_url: string | null; attachment_url: string | null } | null = null;
+  if (input.id) {
+    const { data } = await supabase
+      .from("announcements")
+      .select("image_url, attachment_url")
+      .eq("id", input.id)
+      .eq("organization_id", organizationId)
+      .single();
+    if (!data) return fail("Annonce introuvable.");
+    existing = data;
+  }
+
+  const imageUrl = input.image ? publicUrl(supabase, input.image.path) : input.removeImage ? null : undefined;
+  const attachmentChange = input.attachment
+    ? { attachment_url: publicUrl(supabase, input.attachment.path), attachment_name: input.attachment.name, attachment_type: input.attachment.type }
+    : input.removeAttachment
+      ? { attachment_url: null, attachment_name: null, attachment_type: null }
+      : {};
+
+  const row = {
     title: v.title,
     content: v.content,
-    status: v.status,
-    publish_at: orNull(v.publishAt),
-    expires_at: orNull(v.expiresAt),
+    status,
+    publish_at: publishAt ? publishAt.toISOString() : null,
+    announcement_type: v.announcementType,
+    category: v.category,
+    importance: v.importance,
     audience_filter: audience,
-    image_url: uploaded?.url ?? null,
-    created_by: check.user.id,
-  });
-  if (error) {
-    if (uploaded) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([uploaded.path]);
-    return { error: error.message };
+    ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
+    ...attachmentChange,
+  };
+
+  let announcementId = input.id;
+  if (input.id) {
+    const { error } = await supabase.from("announcements").update(row).eq("id", input.id).eq("organization_id", organizationId);
+    if (error) return fail(error.message);
+  } else {
+    const { data, error } = await supabase
+      .from("announcements")
+      .insert({ ...row, organization_id: organizationId, created_by: check.user.id })
+      .select("id")
+      .single();
+    if (error) return fail(error.message);
+    announcementId = data.id;
+  }
+
+  // Anciens médias supprimés une fois la ligne à jour.
+  if (existing) {
+    const stale: string[] = [];
+    if (imageUrl !== undefined) stale.push(announcementImagePath(existing.image_url) ?? "");
+    if (input.attachment || input.removeAttachment) stale.push(announcementImagePath(existing.attachment_url) ?? "");
+    const paths = stale.filter(Boolean);
+    if (paths.length) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove(paths);
+  }
+
+  // ---- Réseaux sociaux (après l'enregistrement : un échec ne l'annule pas) ----
+  const social: SocialResult[] = [];
+  if (connections.length > 0 && announcementId) {
+    const finalImage =
+      imageUrl !== undefined ? imageUrl : existing?.image_url ?? null;
+    const message = `${v.title}\n\n${markdownToPlain(v.content)}`;
+    const alreadyPosted = await db
+      .select({ connectionId: announcementSocialPosts.connectionId })
+      .from(announcementSocialPosts)
+      .where(and(eq(announcementSocialPosts.announcementId, announcementId), inArray(announcementSocialPosts.status, ["published", "scheduled"])));
+    const posted = new Set(alreadyPosted.map((p) => p.connectionId));
+
+    for (const c of connections) {
+      if (posted.has(c.id)) continue;
+      const result: SocialResult = { provider: c.provider, label: c.label, status: "failed" };
+      let externalId: string | null = null;
+      try {
+        const token = decryptToken(c.tokenEncrypted);
+        if (c.provider === "facebook") {
+          const res = await publishToFacebook({
+            pageId: c.externalId,
+            token,
+            message,
+            imageUrl: finalImage,
+            scheduledAt: scheduled ? requestedAt : null,
+          });
+          externalId = res.id;
+          result.status = res.scheduled ? "scheduled" : "published";
+        } else {
+          const res = await publishToInstagram({ igUserId: c.externalId, token, caption: message, imageUrl: finalImage! });
+          externalId = res.id;
+          result.status = "published";
+        }
+      } catch (err) {
+        result.error = err instanceof Error ? err.message : "Échec de la publication.";
+      }
+      social.push(result);
+      await db.insert(announcementSocialPosts).values({
+        organizationId,
+        announcementId,
+        connectionId: c.id,
+        provider: c.provider,
+        status: result.status,
+        externalPostId: externalId,
+        error: result.error ?? null,
+      });
+    }
   }
 
   revalidatePath("/communication");
-  return { success: true };
-}
-
-export async function updateAnnouncement(
-  announcementId: string,
-  _prev: CommunicationActionState,
-  formData: FormData,
-): Promise<CommunicationActionState> {
-  const check = await checkPermission("communication.manage");
-  if (!check.allowed) return { error: "Vous n'avez pas la permission de modifier cette annonce." };
-
-  const parsed = parseAnnouncementForm(formData);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
-  const v = parsed.data;
-  const image = imageFile(formData);
-  const imageError = validateImage(image);
-  if (imageError) return { error: imageError };
-  const removeImage = formData.get("removeImage") === "on";
-
-  const organizationId = check.organization.organization.id;
-  const audience = await resolveAudience(organizationId, v.audience);
-  if (!audience) return { error: "Destinataires introuvables." };
-
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("announcements")
-    .select("image_url")
-    .eq("id", announcementId)
-    .eq("organization_id", organizationId)
-    .single();
-  if (!existing) return { error: "Annonce introuvable." };
-
-  let imageUrl: string | null | undefined; // undefined = inchangée
-  let uploaded: { path: string; url: string } | undefined;
-  if (image) {
-    const res = await uploadAnnouncementImage(supabase, organizationId, image);
-    if ("error" in res && res.error) return { error: res.error };
-    uploaded = res as { path: string; url: string };
-    imageUrl = uploaded.url;
-  } else if (removeImage) {
-    imageUrl = null;
-  }
-
-  const { error } = await supabase
-    .from("announcements")
-    .update({
-      title: v.title,
-      content: v.content,
-      status: v.status,
-      publish_at: orNull(v.publishAt),
-      expires_at: orNull(v.expiresAt),
-      audience_filter: audience,
-      ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
-    })
-    .eq("id", announcementId)
-    .eq("organization_id", organizationId);
-  if (error) {
-    if (uploaded) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([uploaded.path]);
-    return { error: error.message };
-  }
-  const oldPath = imageUrl !== undefined ? announcementImagePath(existing.image_url) : null;
-  if (oldPath) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([oldPath]);
-
-  revalidatePath("/communication");
-  return { success: true };
+  return { success: true, announcementId, social };
 }
 
 /** Enregistre qu'un utilisateur a ouvert une annonce (une seule fois par utilisateur et par annonce :
@@ -216,7 +299,7 @@ export async function deleteAnnouncement(announcementId: string): Promise<Commun
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("announcements")
-    .select("image_url")
+    .select("image_url, attachment_url")
     .eq("id", announcementId)
     .eq("organization_id", check.organization.organization.id)
     .single();
@@ -226,8 +309,8 @@ export async function deleteAnnouncement(announcementId: string): Promise<Commun
     .eq("id", announcementId)
     .eq("organization_id", check.organization.organization.id);
   if (error) return { error: error.message };
-  const imagePath = announcementImagePath(existing?.image_url);
-  if (imagePath) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([imagePath]);
+  const stale = [announcementImagePath(existing?.image_url), announcementImagePath(existing?.attachment_url)].filter((p): p is string => Boolean(p));
+  if (stale.length) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove(stale);
 
   revalidatePath("/communication");
   return { success: true };

@@ -21,6 +21,12 @@ export const announcements = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     audienceFilter: jsonb("audience_filter").notNull().default({}),
     imageUrl: text("image_url"),
+    announcementType: text("announcement_type").notNull().default("announcement"),
+    category: text("category"),
+    importance: text("importance").notNull().default("normal"),
+    attachmentUrl: text("attachment_url"),
+    attachmentName: text("attachment_name"),
+    attachmentType: text("attachment_type"),
     createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -138,3 +144,36 @@ export const notificationPreferences = pgTable(
     ),
   ],
 );
+
+export const socialConnections = pgTable(
+  "social_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    label: text("label").notNull(),
+    externalId: text("external_id").notNull(),
+    tokenEncrypted: text("token_encrypted").notNull(),
+    createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("social_connections_org_provider_external_unique").on(table.organizationId, table.provider, table.externalId)],
+);
+
+export const announcementSocialPosts = pgTable("announcement_social_posts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  announcementId: uuid("announcement_id")
+    .notNull()
+    .references(() => announcements.id, { onDelete: "cascade" }),
+  connectionId: uuid("connection_id").references(() => socialConnections.id, { onDelete: "set null" }),
+  provider: text("provider").notNull(),
+  status: text("status").notNull(),
+  externalPostId: text("external_post_id"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

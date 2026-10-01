@@ -191,7 +191,8 @@ async function loadFeed(organizationId: string): Promise<FeedItem[]> {
       title: a.title,
       excerpt: excerptOf(a.content),
       imageUrl: a.imageUrl,
-      status: a.status as FeedStatus,
+      // Une annonce programmée dont l'heure est passée est publiée (aucune tâche planifiée n'est nécessaire).
+      status: (a.status === "scheduled" && a.publishAt && a.publishAt.getTime() <= now ? "published" : a.status) as FeedStatus,
       date: a.publishAt ?? a.createdAt,
       recipients: audienceLabel(a.audienceFilter),
       views: reads.get(a.id) ?? 0,

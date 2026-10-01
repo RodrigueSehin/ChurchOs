@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getAudienceBreakdown,
-  getAudienceOptions,
   getCommunicationFeed,
   getCommunicationKpis,
   getEmailTemplatesForSelect,
@@ -22,9 +21,7 @@ import {
   getTypeDistribution,
 } from "@/features/communication/queries";
 import { getPeopleWithEmailForSelect } from "@/features/members/services";
-import { createAnnouncement } from "@/features/communication/actions";
 import { CommunicationTabs } from "@/features/communication/components/communication-tabs";
-import { AnnouncementFormDialog } from "@/features/communication/components/announcement-form-dialog";
 import { FeedTable } from "@/features/communication/components/feed-table";
 import { FeedToolbar } from "@/features/communication/components/feed-toolbar";
 import { TemplateFormDialog } from "@/features/communication/components/template-form-dialog";
@@ -60,7 +57,6 @@ export default async function CommunicationPage({
   const canManage = check.context.isAdmin || check.context.permissions.has("communication.manage");
   const canSend = check.context.isAdmin || check.context.permissions.has("communication.send");
   const page = Math.max(1, Number(params.page) || 1);
-  const audienceOptions = canManage ? await getAudienceOptions(organizationId) : { groups: [], ministries: [] };
 
   return (
     <div className="flex flex-col gap-6">
@@ -68,16 +64,12 @@ export default async function CommunicationPage({
         {...HERO}
         actions={
           canManage ? (
-            <AnnouncementFormDialog
-              action={createAnnouncement}
-              audienceOptions={audienceOptions}
-              trigger={
-                <Button type="button" size="sm">
-                  <Plus className="size-4" />
-                  Nouvelle annonce
-                </Button>
-              }
-            />
+            <Button asChild size="sm">
+              <Link href="/communication/new">
+                <Plus className="size-4" />
+                Nouvelle annonce
+              </Link>
+            </Button>
           ) : undefined
         }
       />
@@ -92,7 +84,6 @@ export default async function CommunicationPage({
           canManage={canManage}
           canSend={canSend}
           isAdmin={check.context.isAdmin}
-          audienceOptions={audienceOptions}
         />
       )}
       {tab === "templates" && <TemplatesTab organizationId={organizationId} canManage={canManage} isAdmin={check.context.isAdmin} />}
@@ -114,7 +105,6 @@ async function FeedTab({
   canManage,
   canSend,
   isAdmin,
-  audienceOptions,
 }: {
   organizationId: string;
   search?: string;
@@ -123,7 +113,6 @@ async function FeedTab({
   canManage: boolean;
   canSend: boolean;
   isAdmin: boolean;
-  audienceOptions: { groups: { id: string; name: string }[]; ministries: { id: string; name: string }[] };
 }) {
   const feed = await getCommunicationFeed({ organizationId, search, view, page });
   const kpis = await getCommunicationKpis(organizationId, feed.all);
@@ -185,7 +174,7 @@ async function FeedTab({
                 <EmptyState icon={Megaphone} title="Aucune annonce" description="Créez la première annonce de votre église." className="border-0" />
               )
             ) : (
-              <FeedTable rows={feed.rows} canManage={canManage} isAdmin={isAdmin} audienceOptions={audienceOptions} />
+              <FeedTable rows={feed.rows} canManage={canManage} isAdmin={isAdmin} />
             )}
             <Pagination
               page={page}
