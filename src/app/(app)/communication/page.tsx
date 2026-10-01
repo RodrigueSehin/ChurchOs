@@ -1,40 +1,54 @@
-import { Megaphone } from "lucide-react";
+import Link from "next/link";
+import { Eye, Mail, Megaphone, Plus, Users } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
-import { PageHeader } from "@/components/shared/page-header";
+import { PageHero } from "@/components/shared/page-hero";
+import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
 import { EmptyState } from "@/components/shared/empty-state";
 import { NoResultsState } from "@/components/shared/no-results-state";
 import { Pagination } from "@/components/shared/pagination";
-import { SearchBox } from "@/components/shared/search-box";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  getAnnouncements,
+  getAudienceBreakdown,
+  getAudienceOptions,
+  getCommunicationFeed,
+  getCommunicationKpis,
   getEmailTemplatesForSelect,
   getMessageRecipients,
   getMessages,
   getTemplates,
+  getTypeDistribution,
 } from "@/features/communication/queries";
 import { getPeopleWithEmailForSelect } from "@/features/members/services";
 import { createAnnouncement } from "@/features/communication/actions";
 import { CommunicationTabs } from "@/features/communication/components/communication-tabs";
 import { AnnouncementFormDialog } from "@/features/communication/components/announcement-form-dialog";
-import { AnnouncementsTable } from "@/features/communication/components/announcements-table";
+import { FeedTable } from "@/features/communication/components/feed-table";
+import { FeedToolbar } from "@/features/communication/components/feed-toolbar";
 import { TemplateFormDialog } from "@/features/communication/components/template-form-dialog";
 import { TemplatesList } from "@/features/communication/components/templates-list";
 import { ComposeMessageForm } from "@/features/communication/components/compose-message-form";
 import { MessagesHistory } from "@/features/communication/components/messages-history";
+import { DonutChart } from "@/features/training/components/donut-chart";
+
+const HERO = {
+  title: "Annonces et Messages",
+  description: "Communiquez efficacement avec les membres de votre église.",
+  verseContext: "communication" as const,
+};
 
 export default async function CommunicationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ tab?: string; q?: string; page?: string; view?: string }>;
 }) {
   const check = await checkPermission("communication.view");
   if (!check.allowed) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader title="Annonces & messages" description="Annonces, modèles, envois et historique." />
+        <PageHero {...HERO} />
         <PermissionDenied requiredPermission="communication.view" />
       </div>
     );
@@ -45,71 +59,217 @@ export default async function CommunicationPage({
   const organizationId = check.organization.organization.id;
   const canManage = check.context.isAdmin || check.context.permissions.has("communication.manage");
   const canSend = check.context.isAdmin || check.context.permissions.has("communication.send");
+  const page = Math.max(1, Number(params.page) || 1);
+  const audienceOptions = canManage ? await getAudienceOptions(organizationId) : { groups: [], ministries: [] };
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Annonces & messages" description="Annonces, modèles, envois et historique." />
-      <CommunicationTabs active={tab} />
+      <PageHero
+        {...HERO}
+        actions={
+          canManage ? (
+            <AnnouncementFormDialog
+              action={createAnnouncement}
+              audienceOptions={audienceOptions}
+              trigger={
+                <Button type="button" size="sm">
+                  <Plus className="size-4" />
+                  Nouvelle annonce
+                </Button>
+              }
+            />
+          ) : undefined
+        }
+      />
+      {tab !== "announcements" && <CommunicationTabs active={tab} />}
 
       {tab === "announcements" && (
-        <AnnouncementsTab organizationId={organizationId} search={params.q} page={Math.max(1, Number(params.page) || 1)} canManage={canManage} isAdmin={check.context.isAdmin} />
+        <FeedTab
+          organizationId={organizationId}
+          search={params.q}
+          view={["announcement", "message", "draft", "scheduled"].includes(params.view ?? "") ? (params.view as string) : ""}
+          page={page}
+          canManage={canManage}
+          canSend={canSend}
+          isAdmin={check.context.isAdmin}
+          audienceOptions={audienceOptions}
+        />
       )}
       {tab === "templates" && <TemplatesTab organizationId={organizationId} canManage={canManage} isAdmin={check.context.isAdmin} />}
       {tab === "compose" && (canSend ? <ComposeTab organizationId={organizationId} /> : <PermissionDenied requiredPermission="communication.send" />)}
-      {tab === "history" && <HistoryTab organizationId={organizationId} page={Math.max(1, Number(params.page) || 1)} canSend={canSend} />}
+      {tab === "history" && <HistoryTab organizationId={organizationId} page={page} canSend={canSend} />}
     </div>
   );
 }
 
-async function AnnouncementsTab({
+function n(value: number) {
+  return new Intl.NumberFormat("fr-FR").format(value);
+}
+
+async function FeedTab({
   organizationId,
   search,
+  view,
   page,
   canManage,
+  canSend,
   isAdmin,
+  audienceOptions,
 }: {
   organizationId: string;
   search?: string;
+  view: string;
   page: number;
   canManage: boolean;
+  canSend: boolean;
   isAdmin: boolean;
+  audienceOptions: { groups: { id: string; name: string }[]; ministries: { id: string; name: string }[] };
 }) {
-  const { rows, total, pageSize } = await getAnnouncements({ organizationId, search, page });
+  const feed = await getCommunicationFeed({ organizationId, search, view, page });
+  const kpis = await getCommunicationKpis(organizationId, feed.all);
+  const distribution = getTypeDistribution(feed.all);
+  const audiences = getAudienceBreakdown(feed.all);
+  const recent = feed.all.filter((i) => i.status === "published").slice(0, 5);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <SearchBox initialValue={search ?? ""} placeholder="Rechercher une annonce..." />
-        {canManage && <AnnouncementFormDialog action={createAnnouncement} />}
+    <>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          icon={Megaphone}
+          iconClassName="bg-blue-100 text-blue-600"
+          label="Annonces publiées"
+          value={n(kpis.publishedAnnouncements.value)}
+          delta={kpis.publishedAnnouncements.growthPct ?? undefined}
+          periodLabel="vs mois dernier"
+        />
+        <KpiCard
+          icon={Mail}
+          iconClassName="bg-green-100 text-green-600"
+          label="Messages envoyés"
+          value={n(kpis.sentMessages.value)}
+          delta={kpis.sentMessages.growthPct ?? undefined}
+          periodLabel="vs mois dernier"
+        />
+        <KpiCard icon={Users} iconClassName="bg-purple-100 text-purple-600" label="Membres touchés" value={n(kpis.membersReached)} periodLabel="par au moins un message" />
+        <KpiCard
+          icon={Eye}
+          iconClassName="bg-amber-100 text-amber-600"
+          label="Taux de lecture moyen"
+          value={kpis.readRate === null ? "—" : `${kpis.readRate}%`}
+          periodLabel="lecteurs / membres actifs"
+        />
       </div>
-      <Card>
-        <CardContent className="pt-5">
-          {rows.length === 0 ? (
-            search ? (
-              <NoResultsState className="border-0" />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <Card>
+          <CardContent className="flex flex-col gap-4 pt-5">
+            <FeedToolbar view={view} initialSearch={search ?? ""} counts={feed.counts} />
+            <div className="flex flex-wrap gap-2 text-xs">
+              {canSend && (
+                <Link href="/communication?tab=compose" className="rounded-md bg-slate-100 px-2.5 py-1 font-medium text-navy hover:bg-slate-200">
+                  Composer un message
+                </Link>
+              )}
+              <Link href="/communication?tab=templates" className="rounded-md bg-slate-100 px-2.5 py-1 font-medium text-navy hover:bg-slate-200">
+                Modèles
+              </Link>
+              <Link href="/communication?tab=history" className="rounded-md bg-slate-100 px-2.5 py-1 font-medium text-navy hover:bg-slate-200">
+                Historique des envois
+              </Link>
+            </div>
+
+            {feed.rows.length === 0 ? (
+              search || view ? (
+                <NoResultsState className="border-0" />
+              ) : (
+                <EmptyState icon={Megaphone} title="Aucune annonce" description="Créez la première annonce de votre église." className="border-0" />
+              )
             ) : (
-              <EmptyState icon={Megaphone} title="Aucune annonce" description="Créez la première annonce de votre église." className="border-0" />
-            )
-          ) : (
-            <>
-              <AnnouncementsTable rows={rows} canManage={canManage} isAdmin={isAdmin} />
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                hrefForPage={(p) => {
-                  const sp = new URLSearchParams();
-                  sp.set("tab", "announcements");
-                  if (search) sp.set("q", search);
-                  sp.set("page", String(p));
-                  return `/communication?${sp.toString()}`;
-                }}
-              />
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+              <FeedTable rows={feed.rows} canManage={canManage} isAdmin={isAdmin} audienceOptions={audienceOptions} />
+            )}
+            <Pagination
+              page={page}
+              pageSize={feed.pageSize}
+              total={feed.total}
+              hrefForPage={(p) => {
+                const sp = new URLSearchParams();
+                if (search) sp.set("q", search);
+                if (view) sp.set("view", view);
+                sp.set("page", String(p));
+                return `/communication?${sp.toString()}`;
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        <aside className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Répartition par type</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {distribution.length === 0 ? (
+                <p className="text-sm text-slate-500">Aucune donnée pour le moment.</p>
+              ) : (
+                <DonutChart data={distribution} centerLabel="Publications" />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Destinataires</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2.5">
+              {audiences.length === 0 ? (
+                <p className="text-sm text-slate-500">Aucune donnée pour le moment.</p>
+              ) : (
+                audiences.map((a) => (
+                  <div key={a.label} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="flex min-w-0 items-center gap-2.5 text-slate-600">
+                      <Users className="size-4 shrink-0 text-primary" />
+                      <span className="truncate">{a.label}</span>
+                    </span>
+                    <span className="font-semibold text-navy">{a.value}</span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Annonces récentes</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {recent.length === 0 ? (
+                <p className="text-sm text-slate-500">Aucune publication pour le moment.</p>
+              ) : (
+                recent.map((r) => (
+                  <div key={`${r.kind}-${r.id}`} className="flex items-center gap-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-navy to-primary text-white/80">
+                      {r.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- image du bucket public
+                        <img src={r.imageUrl} alt="" className="size-full object-cover" />
+                      ) : r.kind === "announcement" ? (
+                        <Megaphone className="size-4" />
+                      ) : (
+                        <Mail className="size-4" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-navy">{r.title}</span>
+                      <span className="block text-xs text-slate-400">{new Intl.DateTimeFormat("fr-FR").format(r.date)}</span>
+                    </span>
+                    <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">Publiée</span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
+    </>
   );
 }
 

@@ -22,6 +22,15 @@ export const VERSE_POOLS = {
     v("Je puis tout par celui qui me fortifie.", "Philippiens 4:13"),
     v("Car je connais les projets que j'ai formés sur vous, dit l'Éternel, projets de paix et non de malheur, afin de vous donner un avenir et de l'espérance.", "Jérémie 29:11"),
   ],
+  communication: [
+    v("Allez, faites de toutes les nations des disciples.", "Matthieu 28:19"),
+    v("Allez par tout le monde, et prêchez la bonne nouvelle à toute la création.", "Marc 16:15"),
+    v("Qu'ils sont beaux les pieds de ceux qui annoncent la paix, de ceux qui annoncent de bonnes nouvelles !", "Romains 10:15"),
+    v("Comme des pommes d'or enchâssées dans des ciselures d'argent, ainsi est une parole dite à propos.", "Proverbes 25:11"),
+    v("Que votre parole soit toujours accompagnée de grâce, assaisonnée de sel.", "Colossiens 4:6"),
+    v("Les paroles agréables sont un rayon de miel, douces pour l'âme et salutaires pour le corps.", "Proverbes 16:24"),
+    v("S'il y a lieu, quelque bonne parole, qui serve à l'édification et communique une grâce à ceux qui l'entendent.", "Éphésiens 4:29"),
+  ],
   members: [
     v("Nous sommes membres les uns des autres.", "Éphésiens 4:25"),
     v("Ainsi, nous qui sommes plusieurs, nous formons un seul corps en Christ, et nous sommes tous membres les uns des autres.", "Romains 12:5"),

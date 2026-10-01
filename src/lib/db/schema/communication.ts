@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 import { authUsers } from "./auth-ref";
 import { campuses, organizations } from "./identity-org";
@@ -20,6 +20,7 @@ export const announcements = pgTable(
     publishAt: timestamp("publish_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     audienceFilter: jsonb("audience_filter").notNull().default({}),
+    imageUrl: text("image_url"),
     createdBy: uuid("created_by").references(() => authUsers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -30,6 +31,23 @@ export const announcements = pgTable(
       sql`${table.status} in ('draft','scheduled','published','archived')`,
     ),
   ],
+);
+
+export const announcementReads = pgTable(
+  "announcement_reads",
+  {
+    announcementId: uuid("announcement_id")
+      .notNull()
+      .references(() => announcements.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.announcementId, table.userId] })],
 );
 
 export const messageTemplates = pgTable(

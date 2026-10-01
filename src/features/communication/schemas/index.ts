@@ -27,12 +27,41 @@ export const NOTIFICATION_STATUS_LABELS: Record<string, string> = {
   read: "Lu",
 };
 
+export const ANNOUNCEMENT_IMAGE_BUCKET = "churchos-announcements";
+export const ANNOUNCEMENT_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+export const ANNOUNCEMENT_IMAGE_MIME_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+/** Chemin Storage d'une image d'annonce de NOTRE bucket (sinon `null`). */
+export function announcementImagePath(url: string | null | undefined) {
+  const marker = `/object/public/${ANNOUNCEMENT_IMAGE_BUCKET}/`;
+  const i = url?.indexOf(marker) ?? -1;
+  return url && i >= 0 ? decodeURIComponent(url.slice(i + marker.length)) : null;
+}
+
+/** Destinataires d'une annonce, stockés dans `announcements.audience_filter` (jsonb). */
+export type Audience = { type: "all" } | { type: "group" | "ministry"; id: string; name: string };
+
+export function audienceLabel(filter: unknown): string {
+  const a = filter as Partial<Audience> | null;
+  if (a && (a.type === "group" || a.type === "ministry") && "name" in a && a.name) return a.name;
+  return "Tous les membres";
+}
+
 export const announcementSchema = z.object({
   title: z.string().min(1, "Titre requis"),
   content: z.string().min(1, "Contenu requis"),
   status: z.enum(["draft", "scheduled", "published", "archived"]).default("draft"),
   publishAt: optionalDateTime,
   expiresAt: optionalDateTime,
+  /** `all`, `group:<uuid>` ou `ministry:<uuid>`. */
+  audience: z
+    .string()
+    .nullish()
+    .transform((v) => v || "all"),
 });
 export type AnnouncementInput = z.infer<typeof announcementSchema>;
 

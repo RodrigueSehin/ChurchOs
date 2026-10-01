@@ -1,14 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { checkPermission } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/client";
-import { people } from "@/lib/db/schema";
+import { groups, ministries, people } from "@/lib/db/schema";
 import { EMAIL_FROM, getResendClient } from "@/lib/email/resend";
-import { announcementSchema, messageSchema, templateSchema } from "@/features/communication/schemas";
+import {
+  ANNOUNCEMENT_IMAGE_BUCKET,
+  ANNOUNCEMENT_IMAGE_MAX_BYTES,
+  ANNOUNCEMENT_IMAGE_MIME_EXTENSIONS,
+  announcementImagePath,
+  announcementSchema,
+  messageSchema,
+  templateSchema,
+  type Audience,
+} from "@/features/communication/schemas";
 
 export interface CommunicationActionState {
   error?: string;
@@ -26,7 +35,48 @@ function parseAnnouncementForm(formData: FormData) {
     status: formData.get("status"),
     publishAt: formData.get("publishAt"),
     expiresAt: formData.get("expiresAt"),
+    audience: formData.get("audience"),
   });
+}
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/** `all` | `group:<uuid>` | `ministry:<uuid>` → filtre stocké (nom inclus : affichage sans jointure). */
+async function resolveAudience(organizationId: string, raw: string): Promise<Audience | null> {
+  if (raw === "all") return { type: "all" };
+  const [kind, id] = raw.split(":");
+  if (!id) return null;
+  if (kind === "group") {
+    const [row] = await db.select({ name: groups.name }).from(groups).where(and(eq(groups.id, id), eq(groups.organizationId, organizationId)));
+    return row ? { type: "group", id, name: row.name } : null;
+  }
+  if (kind === "ministry") {
+    const [row] = await db
+      .select({ name: ministries.name })
+      .from(ministries)
+      .where(and(eq(ministries.id, id), eq(ministries.organizationId, organizationId)));
+    return row ? { type: "ministry", id, name: row.name } : null;
+  }
+  return null;
+}
+
+function imageFile(formData: FormData) {
+  const file = formData.get("image");
+  return file instanceof File && file.size > 0 ? file : undefined;
+}
+
+function validateImage(file: File | undefined) {
+  if (!file) return null;
+  if (!ANNOUNCEMENT_IMAGE_MIME_EXTENSIONS[file.type]) return "Image : JPG, PNG ou WebP uniquement.";
+  if (file.size > ANNOUNCEMENT_IMAGE_MAX_BYTES) return "Image trop volumineuse (4 Mo maximum).";
+  return null;
+}
+
+async function uploadAnnouncementImage(supabase: Supabase, organizationId: string, file: File) {
+  const path = `${organizationId}/${crypto.randomUUID()}.${ANNOUNCEMENT_IMAGE_MIME_EXTENSIONS[file.type]}`;
+  const { error } = await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).upload(path, file, { contentType: file.type });
+  if (error) return { error: `Échec du téléversement de l'image : ${error.message}` };
+  return { path, url: supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl };
 }
 
 export async function createAnnouncement(_prev: CommunicationActionState, formData: FormData): Promise<CommunicationActionState> {
@@ -36,18 +86,37 @@ export async function createAnnouncement(_prev: CommunicationActionState, formDa
   const parsed = parseAnnouncementForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
+  const image = imageFile(formData);
+  const imageError = validateImage(image);
+  if (imageError) return { error: imageError };
+
+  const organizationId = check.organization.organization.id;
+  const audience = await resolveAudience(organizationId, v.audience);
+  if (!audience) return { error: "Destinataires introuvables." };
 
   const supabase = await createClient();
+  let uploaded: { path: string; url: string } | undefined;
+  if (image) {
+    const res = await uploadAnnouncementImage(supabase, organizationId, image);
+    if ("error" in res && res.error) return { error: res.error };
+    uploaded = res as { path: string; url: string };
+  }
+
   const { error } = await supabase.from("announcements").insert({
-    organization_id: check.organization.organization.id,
+    organization_id: organizationId,
     title: v.title,
     content: v.content,
     status: v.status,
     publish_at: orNull(v.publishAt),
     expires_at: orNull(v.expiresAt),
+    audience_filter: audience,
+    image_url: uploaded?.url ?? null,
     created_by: check.user.id,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    if (uploaded) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([uploaded.path]);
+    return { error: error.message };
+  }
 
   revalidatePath("/communication");
   return { success: true };
@@ -64,8 +133,35 @@ export async function updateAnnouncement(
   const parsed = parseAnnouncementForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide" };
   const v = parsed.data;
+  const image = imageFile(formData);
+  const imageError = validateImage(image);
+  if (imageError) return { error: imageError };
+  const removeImage = formData.get("removeImage") === "on";
+
+  const organizationId = check.organization.organization.id;
+  const audience = await resolveAudience(organizationId, v.audience);
+  if (!audience) return { error: "Destinataires introuvables." };
 
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("announcements")
+    .select("image_url")
+    .eq("id", announcementId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (!existing) return { error: "Annonce introuvable." };
+
+  let imageUrl: string | null | undefined; // undefined = inchangée
+  let uploaded: { path: string; url: string } | undefined;
+  if (image) {
+    const res = await uploadAnnouncementImage(supabase, organizationId, image);
+    if ("error" in res && res.error) return { error: res.error };
+    uploaded = res as { path: string; url: string };
+    imageUrl = uploaded.url;
+  } else if (removeImage) {
+    imageUrl = null;
+  }
+
   const { error } = await supabase
     .from("announcements")
     .update({
@@ -74,9 +170,35 @@ export async function updateAnnouncement(
       status: v.status,
       publish_at: orNull(v.publishAt),
       expires_at: orNull(v.expiresAt),
+      audience_filter: audience,
+      ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
     })
     .eq("id", announcementId)
-    .eq("organization_id", check.organization.organization.id);
+    .eq("organization_id", organizationId);
+  if (error) {
+    if (uploaded) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([uploaded.path]);
+    return { error: error.message };
+  }
+  const oldPath = imageUrl !== undefined ? announcementImagePath(existing.image_url) : null;
+  if (oldPath) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([oldPath]);
+
+  revalidatePath("/communication");
+  return { success: true };
+}
+
+/** Enregistre qu'un utilisateur a ouvert une annonce (une seule fois par utilisateur et par annonce :
+ * c'est ce qui alimente « Vues » et le taux de lecture). */
+export async function markAnnouncementRead(announcementId: string): Promise<CommunicationActionState> {
+  const check = await checkPermission("communication.view");
+  if (!check.allowed) return { error: "Action non autorisée." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("announcement_reads")
+    .upsert(
+      { announcement_id: announcementId, user_id: check.user.id, organization_id: check.organization.organization.id },
+      { onConflict: "announcement_id,user_id", ignoreDuplicates: true },
+    );
   if (error) return { error: error.message };
 
   revalidatePath("/communication");
@@ -92,12 +214,20 @@ export async function deleteAnnouncement(announcementId: string): Promise<Commun
   }
 
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("announcements")
+    .select("image_url")
+    .eq("id", announcementId)
+    .eq("organization_id", check.organization.organization.id)
+    .single();
   const { error } = await supabase
     .from("announcements")
     .delete()
     .eq("id", announcementId)
     .eq("organization_id", check.organization.organization.id);
   if (error) return { error: error.message };
+  const imagePath = announcementImagePath(existing?.image_url);
+  if (imagePath) await supabase.storage.from(ANNOUNCEMENT_IMAGE_BUCKET).remove([imagePath]);
 
   revalidatePath("/communication");
   return { success: true };
