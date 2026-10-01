@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Eye, Mail, Megaphone, Plus, Users } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { guardSchema } from "@/lib/db/schema-guard";
+import { MigrationNotice } from "@/components/shared/migration-notice";
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
@@ -114,8 +116,12 @@ async function FeedTab({
   canSend: boolean;
   isAdmin: boolean;
 }) {
-  const feed = await getCommunicationFeed({ organizationId, search, view, page });
-  const kpis = await getCommunicationKpis(organizationId, feed.all);
+  const loaded = await guardSchema(async () => {
+    const feed = await getCommunicationFeed({ organizationId, search, view, page });
+    return { feed, kpis: await getCommunicationKpis(organizationId, feed.all) };
+  });
+  if (!loaded.ok) return <MigrationNotice migration="2026-10-08-announcements-redesign.sql puis 2026-10-09-announcement-composer.sql" />;
+  const { feed, kpis } = loaded.data;
   const distribution = getTypeDistribution(feed.all);
   const audiences = getAudienceBreakdown(feed.all);
   const recent = feed.all.filter((i) => i.status === "published").slice(0, 5);

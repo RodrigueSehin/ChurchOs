@@ -2,6 +2,9 @@ import Link from "next/link";
 import { Award, BookOpen, GraduationCap, Quote, TrendingUp, Users } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { guardSchema } from "@/lib/db/schema-guard";
+import { MigrationNotice } from "@/components/shared/migration-notice";
+
 import { getDailyVerse } from "@/lib/verses";
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
@@ -65,7 +68,8 @@ export default async function TrainingPage({
   const sideVerse = getDailyVerse("training", 1);
   const personId = await getPersonIdForUser(organizationId, check.user.email);
 
-  const [kpis, cards, overview, recent, instructors, people, categories] = await Promise.all([
+  const loaded = await guardSchema(() =>
+    Promise.all([
     getTrainingKpis(organizationId),
     getCourseCards({ organizationId, personId, search: params.q, view, sort, page, includeHidden: canCreate }),
     personId ? getMyTrainingOverview(organizationId, personId) : Promise.resolve(null),
@@ -73,7 +77,17 @@ export default async function TrainingPage({
     getInstructors(organizationId, 4),
     canCreate ? getPeopleForSelect(organizationId) : Promise.resolve([]),
     getCourseCategories(organizationId),
-  ]);
+    ]),
+  );
+  if (!loaded.ok) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHero {...HERO} />
+        <MigrationNotice migration="2026-10-03-course-form-fields.sql puis 2026-10-04-course-categories.sql" />
+      </div>
+    );
+  }
+  const [kpis, cards, overview, recent, instructors, people, categories] = loaded.data;
 
   return (
     <div className="flex flex-col gap-6">

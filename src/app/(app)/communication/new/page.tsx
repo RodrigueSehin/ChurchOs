@@ -1,6 +1,8 @@
 import { Megaphone } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { guardSchema } from "@/lib/db/schema-guard";
+import { MigrationNotice } from "@/components/shared/migration-notice";
 import { PageHeader } from "@/components/shared/page-header";
 import { PermissionDenied } from "@/components/shared/permission-denied";
 import { getAudienceOptions } from "@/features/communication/queries";
@@ -19,7 +21,9 @@ export default async function NewAnnouncementPage() {
   }
 
   const organization = check.organization.organization;
-  const [audienceOptions, connections] = await Promise.all([getAudienceOptions(organization.id), getSocialConnections(organization.id)]);
+  const loaded = await guardSchema(() => Promise.all([getAudienceOptions(organization.id), getSocialConnections(organization.id)]));
+  if (!loaded.ok) return <MigrationNotice migration="2026-10-09-announcement-composer.sql" />;
+  const [audienceOptions, connections] = loaded.data;
 
   return (
     <div className="flex flex-col gap-6">

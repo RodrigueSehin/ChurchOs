@@ -1,4 +1,6 @@
 import { checkPermission } from "@/lib/auth/guards";
+import { guardSchema } from "@/lib/db/schema-guard";
+import { MigrationNotice } from "@/components/shared/migration-notice";
 import { PageHeader } from "@/components/shared/page-header";
 import { PermissionDenied } from "@/components/shared/permission-denied";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +19,9 @@ export default async function SocialSettingsPage() {
     );
   }
 
-  const connections = await getSocialConnections(check.organization.organization.id);
+  const loaded = await guardSchema(() => getSocialConnections(check.organization.organization.id));
+  if (!loaded.ok) return <MigrationNotice migration="2026-10-09-announcement-composer.sql" />;
+  const connections = loaded.data;
 
   return (
     <div className="flex flex-col gap-6">

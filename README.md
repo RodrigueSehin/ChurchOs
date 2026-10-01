@@ -271,13 +271,24 @@ réseaux sociaux.
   puis stocké ; il ne quitte jamais le serveur. Facebook : publication immédiate ou programmation native (10 min
   à 30 jours). Instagram : image obligatoire, pas de programmation (limite de l'API).
 - **WhatsApp** : pas d'API de publication vers un groupe ; le bouton ouvre WhatsApp avec le texte prérempli.
-- **YouTube** : indisponible (l'API ne permet pas de publier du texte), affiché comme tel dans le formulaire.
 - La publication sociale est tentée après l'enregistrement : un échec chez Meta est affiché par compte
   (`announcement_social_posts`) sans annuler l'annonce. Non testée contre les vraies API (aucun jeton ici).
 
 **Migrations à appliquer** : [`2026-10-08-announcements-redesign.sql`](db/migrations/2026-10-08-announcements-redesign.sql)
 et [`2026-10-09-announcement-composer.sql`](db/migrations/2026-10-09-announcement-composer.sql) (idempotentes,
 incluses dans `db/schema.sql`).
+
+### Migrations manquantes : message explicite au lieu d'une page en erreur
+
+Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de
+formulaire) et `/settings/social` détectent une base sans la migration attendue (erreur Postgres
+« colonne / table inexistante », `src/lib/db/schema-guard.ts`) et affichent « Mise à jour de la base de
+données requise » avec le fichier à exécuter, au lieu de l'erreur React #441 (message masqué en
+production). Le fichier **`db/migrations/2026-10-all-migrations.sql`** regroupe les migrations du 3 au
+9 octobre (formulaire de cours, catégories de cours, certifications, bibliothèque, annonces) : à
+exécuter une fois dans le SQL Editor Supabase (idempotent) ; `2026-10-07-library-pdf-docx.sql` reste
+à part si la bibliothèque avait été créée avant la restriction PDF/DOCX. YouTube a été retiré du
+formulaire d'annonce (seuls Facebook, Instagram et le partage WhatsApp restent).
 
 ### Reste à faire
 
