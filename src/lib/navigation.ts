@@ -153,3 +153,8 @@ export function findNavItemByHref(href: string): NavItem | undefined {
   }
   return settingsNav.find((item) => item.href === href);
 }
+
+/** Libellé du groupe du menu qui contient cette page (`null` si hors menu ou sans groupe). */
+export function findNavGroupLabel(href: string): string | null {
+  return navSections.find((section) => section.items.some((item) => item.href === href))?.label ?? null;
+}

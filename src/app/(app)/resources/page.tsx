@@ -1,6 +1,8 @@
 import { CalendarCheck, DoorOpen, Monitor, ShieldCheck, Warehouse } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { guardSchema } from "@/lib/db/schema-guard";
+import { MigrationNotice } from "@/components/shared/migration-notice";
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
@@ -9,7 +11,6 @@ import { NoResultsState } from "@/components/shared/no-results-state";
 import { Pagination } from "@/components/shared/pagination";
 import { Card, CardContent } from "@/components/ui/card";
 import { getReservationsBetween, getResourcesOverview } from "@/features/resources/queries";
-import { readMeta } from "@/features/resources/schemas";
 import { CalendarMonth } from "@/features/resources/components/calendar-month";
 import { EquipmentTable } from "@/features/resources/components/equipment-table";
 import { NewResourceMenu } from "@/features/resources/components/new-resource-menu";
@@ -45,9 +46,17 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
   const page = Math.max(1, Number(params.page) || 1);
   const term = params.q?.trim().toLowerCase();
 
-  const overview = await getResourcesOverview(organizationId);
+  const loadedOverview = await guardSchema(() => getResourcesOverview(organizationId, canManage));
+  if (!loadedOverview.ok) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHero {...HERO} />
+        <MigrationNotice migration="2026-10-11-resources-forms.sql" />
+      </div>
+    );
+  }
+  const overview = loadedOverview.data;
   const { kpis } = overview;
-  const roomOptions = overview.rooms.map((r) => ({ id: r.id, name: r.name }));
   const roomNames = Object.fromEntries(overview.roomNames);
 
   const pageSlice = <T,>(list: T[]) => list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -66,15 +75,14 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
     sp.set("page", String(p));
     return `/resources?${sp.toString()}`;
   };
-  const toolbar = <ResourcesToolbar tab={tab} initialSearch={params.q ?? ""} actions={canManage ? <NewResourceMenu rooms={roomOptions} /> : undefined} />;
+  const toolbar = <ResourcesToolbar tab={tab} initialSearch={params.q ?? ""} actions={canManage ? <NewResourceMenu /> : undefined} />;
 
   let content: React.ReactNode;
   if (tab === "rooms") {
-    const rooms = overview.rooms.filter((r) => !term || `${r.name} ${r.location ?? ""} ${r.meta.roomType ?? ""}`.toLowerCase().includes(term));
+    const rooms = overview.rooms.filter((r) => !term || `${r.name} ${r.location ?? ""} ${r.roomType ?? ""}`.toLowerCase().includes(term));
     content = (
       <RoomsWorkspace
         rooms={pageSlice(rooms)}
-        allRooms={roomOptions}
         canManage={canManage}
         canReserve={canReserve}
         isAdmin={check.context.isAdmin}
@@ -85,9 +93,8 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
     );
   } else if (tab === "equipment") {
     const items = overview.equipment.filter((e) => {
-      const meta = readMeta(e.metadata);
-      if (params.room && meta.roomId !== params.room) return false;
-      return !term || `${e.name} ${meta.category ?? ""}`.toLowerCase().includes(term);
+      if (params.room && e.roomId !== params.room) return false;
+      return !term || `${e.name} ${e.category ?? ""}`.toLowerCase().includes(term);
     });
     content = (
       <div className="flex flex-col gap-4">
@@ -101,7 +108,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
         {items.length === 0 ? (
           term || params.room ? <NoResultsState className="border-0" /> : <EmptyState icon={Monitor} title="Aucun équipement" description="Ajoutez le premier équipement avec « Nouvel équipement »." className="border-0" />
         ) : (
-          <EquipmentTable items={pageSlice(items)} roomNames={roomNames} rooms={roomOptions} canManage={canManage} canReserve={canReserve} isAdmin={check.context.isAdmin} />
+          <EquipmentTable items={pageSlice(items)} roomNames={roomNames} canManage={canManage} canReserve={canReserve} isAdmin={check.context.isAdmin} />
         )}
         {footer(items.length, href({ room: params.room }), "équipement")}
       </div>

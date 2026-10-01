@@ -1,25 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarDays, MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { deleteResource, updateResource } from "@/features/resources/actions";
+import { deleteResource } from "@/features/resources/actions";
 import { CategoryIcon } from "@/features/resources/components/equipment-icons";
 import { ReserveDialog } from "@/features/resources/components/reserve-dialog";
-import { ResourceFormDialog } from "@/features/resources/components/resource-form-dialog";
 import type { ResourceRowData } from "@/features/resources/queries";
-import { RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS, readMeta } from "@/features/resources/schemas";
+import { CONDITION_LABELS, CONDITION_STYLES, RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from "@/features/resources/schemas";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
+  draft: "bg-slate-100 text-slate-600",
   available: "bg-success/10 text-success",
   maintenance: "bg-red-100 text-red-600",
   retired: "bg-slate-100 text-slate-500",
 };
 
-export function EquipmentTable({ items, roomNames, rooms, canManage, canReserve, isAdmin }: { items: ResourceRowData[]; roomNames: Record<string, string>; rooms: { id: string; name: string }[]; canManage: boolean; canReserve: boolean; isAdmin: boolean }) {
+export function EquipmentTable({ items, roomNames, canManage, canReserve, isAdmin }: { items: ResourceRowData[]; roomNames: Record<string, string>; canManage: boolean; canReserve: boolean; isAdmin: boolean }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-sm">
@@ -29,13 +30,13 @@ export function EquipmentTable({ items, roomNames, rooms, canManage, canReserve,
             <th className="px-3 py-2.5">Catégorie</th>
             <th className="px-3 py-2.5">Quantité</th>
             <th className="px-3 py-2.5">Salle</th>
-            <th className="px-3 py-2.5">Statut</th>
+            <th className="px-3 py-2.5">État</th>
             <th className="px-3 py-2.5 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
-            <Row key={item.id} item={item} roomName={roomNames[readMeta(item.metadata).roomId ?? ""]} rooms={rooms} canManage={canManage} canReserve={canReserve} isAdmin={isAdmin} />
+            <Row key={item.id} item={item} roomName={roomNames[item.roomId ?? ""]} canManage={canManage} canReserve={canReserve} isAdmin={isAdmin} />
           ))}
         </tbody>
       </table>
@@ -43,12 +44,10 @@ export function EquipmentTable({ items, roomNames, rooms, canManage, canReserve,
   );
 }
 
-function Row({ item, roomName, rooms, canManage, canReserve, isAdmin }: { item: ResourceRowData; roomName?: string; rooms: { id: string; name: string }[]; canManage: boolean; canReserve: boolean; isAdmin: boolean }) {
+function Row({ item, roomName, canManage, canReserve, isAdmin }: { item: ResourceRowData; roomName?: string; canManage: boolean; canReserve: boolean; isAdmin: boolean }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
   const [reserving, setReserving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const meta = readMeta(item.metadata);
 
   async function remove() {
     const res = await deleteResource(item.id);
@@ -60,18 +59,22 @@ function Row({ item, roomName, rooms, canManage, canReserve, isAdmin }: { item: 
     <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
       <td className="px-3 py-3">
         <span className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary"><CategoryIcon category={meta.category} className="size-4" /></span>
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary"><CategoryIcon category={item.category} className="size-4" /></span>
           <span className="min-w-0">
             <span className="block truncate font-semibold text-navy">{item.name}</span>
             {item.type !== "equipment" && <span className="text-xs text-slate-400">{RESOURCE_TYPE_LABELS[item.type]}</span>}
           </span>
         </span>
       </td>
-      <td className="px-3 py-3 text-slate-600">{meta.category ?? "—"}</td>
+      <td className="px-3 py-3 text-slate-600">{item.category ?? "—"}</td>
       <td className="px-3 py-3 text-slate-600">{item.quantity}</td>
       <td className="px-3 py-3 text-slate-600">{roomName ?? <span className="text-slate-400">Non affecté</span>}</td>
       <td className="px-3 py-3">
-        <span className={cn("inline-block rounded-md px-2.5 py-1 text-xs font-medium", STATUS_STYLES[item.status])}>{RESOURCE_STATUS_LABELS[item.status]}</span>
+        {item.status === "available" && item.condition ? (
+          <span className={cn("inline-block rounded-md px-2.5 py-1 text-xs font-medium", CONDITION_STYLES[item.condition])}>{CONDITION_LABELS[item.condition]}</span>
+        ) : (
+          <span className={cn("inline-block rounded-md px-2.5 py-1 text-xs font-medium", STATUS_STYLES[item.status])}>{RESOURCE_STATUS_LABELS[item.status]}</span>
+        )}
       </td>
       <td className="px-3 py-3">
         <div className="flex justify-end">
@@ -88,10 +91,10 @@ function Row({ item, roomName, rooms, canManage, canReserve, isAdmin }: { item: 
                   </button>
                 )}
                 {canManage && (
-                  <button type="button" onClick={() => setEditing(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
+                  <Link href={`/resources/${item.id}/edit`} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
                     <Pencil className="size-4" />
                     Modifier
-                  </button>
+                  </Link>
                 )}
                 {isAdmin && (
                   <ConfirmDialog
@@ -113,7 +116,6 @@ function Row({ item, roomName, rooms, canManage, canReserve, isAdmin }: { item: 
           )}
         </div>
         {error && <p role="alert" className="text-right text-xs text-danger">{error}</p>}
-        {editing && <ResourceFormDialog action={updateResource.bind(null, item.id)} resource={item} rooms={rooms} open onOpenChange={(o) => !o && setEditing(false)} />}
         {reserving && <ReserveDialog resourceId={item.id} resourceName={item.name} open onOpenChange={(o) => !o && setReserving(false)} />}
       </td>
     </tr>

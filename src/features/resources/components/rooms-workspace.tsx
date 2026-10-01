@@ -7,21 +7,21 @@ import { CalendarDays, ChevronLeft, ChevronRight, DoorOpen, MapPin, MoreVertical
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { deleteResource, updateResource } from "@/features/resources/actions";
+import { deleteResource } from "@/features/resources/actions";
 import { CategoryIcon } from "@/features/resources/components/equipment-icons";
 import { ReserveDialog } from "@/features/resources/components/reserve-dialog";
-import { ResourceFormDialog } from "@/features/resources/components/resource-form-dialog";
 import type { RoomView } from "@/features/resources/queries";
 import { RESERVATION_STATUS_LABELS, ROOM_TYPE_STYLES } from "@/features/resources/schemas";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLES = {
+  draft: "bg-slate-100 text-slate-600",
   available: "bg-success/10 text-success",
   reserved: "bg-amber-100 text-amber-700",
   maintenance: "bg-red-100 text-red-600",
   retired: "bg-slate-100 text-slate-500",
 } as const;
-const STATUS_LABELS = { available: "Disponible", reserved: "Réservée", maintenance: "En maintenance", retired: "Retirée" } as const;
+const STATUS_LABELS = { draft: "Brouillon", available: "Disponible", reserved: "Réservée", maintenance: "En maintenance", retired: "Retirée" } as const;
 const RESERVATION_STYLES: Record<string, string> = {
   confirmed: "bg-success/10 text-success",
   pending: "bg-amber-100 text-amber-700",
@@ -38,7 +38,6 @@ function fmtRange(start: Date, end: Date) {
 /** Tableau des salles (gauche) + panneau de détail de la salle sélectionnée (droite). */
 export function RoomsWorkspace({
   rooms,
-  allRooms,
   canManage,
   canReserve,
   isAdmin,
@@ -47,7 +46,6 @@ export function RoomsWorkspace({
   toolbar,
 }: {
   rooms: RoomView[];
-  allRooms: { id: string; name: string }[];
   canManage: boolean;
   canReserve: boolean;
   isAdmin: boolean;
@@ -80,7 +78,7 @@ export function RoomsWorkspace({
               </thead>
               <tbody>
                 {rooms.map((room) => (
-                  <RoomRow key={room.id} room={room} selected={selected?.id === room.id} onSelect={() => setSelectedId(room.id)} allRooms={allRooms} canManage={canManage} canReserve={canReserve} isAdmin={isAdmin} />
+                  <RoomRow key={room.id} room={room} selected={selected?.id === room.id} onSelect={() => setSelectedId(room.id)} canManage={canManage} canReserve={canReserve} isAdmin={isAdmin} />
                 ))}
               </tbody>
             </table>
@@ -88,15 +86,15 @@ export function RoomsWorkspace({
         )}
         {footer}
       </div>
-      {selected && <RoomDetail key={selected.id} room={selected} allRooms={allRooms} canManage={canManage} canReserve={canReserve} />}
+      {selected && <RoomDetail key={selected.id} room={selected} canManage={canManage} canReserve={canReserve} />}
     </div>
   );
 }
 
 function EquipmentIcons({ room }: { room: RoomView }) {
-  const categories = [...new Set(room.equipment.map((e) => e.category))];
+  const categories = room.amenities;
   const shown = categories.slice(0, 3);
-  if (room.equipment.length === 0) return <span className="text-slate-400">—</span>;
+  if (categories.length === 0) return <span className="text-slate-400">—</span>;
   return (
     <span className="inline-flex items-center gap-2 text-slate-600">
       {shown.map((c, i) => (
@@ -107,9 +105,8 @@ function EquipmentIcons({ room }: { room: RoomView }) {
   );
 }
 
-function RoomRow({ room, selected, onSelect, allRooms, canManage, canReserve, isAdmin }: { room: RoomView; selected: boolean; onSelect: () => void; allRooms: { id: string; name: string }[]; canManage: boolean; canReserve: boolean; isAdmin: boolean }) {
+function RoomRow({ room, selected, onSelect, canManage, canReserve, isAdmin }: { room: RoomView; selected: boolean; onSelect: () => void; canManage: boolean; canReserve: boolean; isAdmin: boolean }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
   const [reserving, setReserving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,10 +120,10 @@ function RoomRow({ room, selected, onSelect, allRooms, canManage, canReserve, is
     <tr onClick={onSelect} className={cn("cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60", selected && "bg-blue-50/60")}>
       <td className="px-3 py-3 font-semibold text-navy">{room.name}</td>
       <td className="px-3 py-3 text-slate-600">
-        <span className="inline-flex items-center gap-1.5"><Users className="size-4 text-primary" />{room.meta.capacity ?? "—"}</span>
+        <span className="inline-flex items-center gap-1.5"><Users className="size-4 text-primary" />{room.capacity ?? "—"}</span>
       </td>
       <td className="px-3 py-3">
-        {room.meta.roomType ? <span className={cn("rounded-full px-3 py-0.5 text-xs font-medium", ROOM_TYPE_STYLES[room.meta.roomType] ?? "bg-slate-100 text-slate-600")}>{room.meta.roomType}</span> : <span className="text-slate-400">—</span>}
+        {room.roomType ? <span className={cn("rounded-full px-3 py-0.5 text-xs font-medium", ROOM_TYPE_STYLES[room.roomType] ?? "bg-slate-100 text-slate-600")}>{room.roomType}</span> : <span className="text-slate-400">—</span>}
       </td>
       <td className="px-3 py-3 text-slate-600">{room.location ?? "—"}</td>
       <td className="px-3 py-3">
@@ -148,10 +145,10 @@ function RoomRow({ room, selected, onSelect, allRooms, canManage, canReserve, is
                   </button>
                 )}
                 {canManage && (
-                  <button type="button" onClick={() => setEditing(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
+                  <Link href={`/resources/${room.id}/edit`} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
                     <Pencil className="size-4" />
                     Modifier
-                  </button>
+                  </Link>
                 )}
                 {isAdmin && (
                   <ConfirmDialog
@@ -173,21 +170,17 @@ function RoomRow({ room, selected, onSelect, allRooms, canManage, canReserve, is
           )}
         </div>
         {error && <p role="alert" className="text-right text-xs text-danger">{error}</p>}
-        {editing && <ResourceFormDialog action={updateResource.bind(null, room.id)} resource={room.resource} rooms={allRooms} open onOpenChange={(o) => !o && setEditing(false)} />}
         {reserving && <ReserveDialog resourceId={room.id} resourceName={room.name} open onOpenChange={(o) => !o && setReserving(false)} />}
       </td>
     </tr>
   );
 }
 
-function RoomDetail({ room, allRooms, canManage, canReserve }: { room: RoomView; allRooms: { id: string; name: string }[]; canManage: boolean; canReserve: boolean }) {
+function RoomDetail({ room, canManage, canReserve }: { room: RoomView; canManage: boolean; canReserve: boolean }) {
   const [photo, setPhoto] = useState(0);
-  const [editing, setEditing] = useState(false);
   const [reserving, setReserving] = useState(false);
-  const photos = room.meta.photos;
-  const cats = new Map<string, number>();
-  for (const e of room.equipment) cats.set(e.category ?? "Autres", (cats.get(e.category ?? "Autres") ?? 0) + 1);
-  const chips = [...cats.entries()];
+  const photos = room.photos;
+  const chips = room.amenities;
 
   return (
     <aside className="flex flex-col gap-4 self-start rounded-2xl border border-slate-200 bg-white p-4 xl:sticky xl:top-4">
@@ -222,9 +215,9 @@ function RoomDetail({ room, allRooms, canManage, canReserve }: { room: RoomView;
       <div>
         <h3 className="text-xl font-bold text-navy">{room.name}</h3>
         <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
-          {room.meta.capacity && <span className="inline-flex items-center gap-1.5"><Users className="size-4 text-primary" />{room.meta.capacity} personnes</span>}
+          {room.capacity && <span className="inline-flex items-center gap-1.5"><Users className="size-4 text-primary" />{room.capacity} personnes</span>}
           {room.location && <span className="inline-flex items-center gap-1.5"><MapPin className="size-4 text-primary" />{room.location}</span>}
-          {room.meta.roomType && <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", ROOM_TYPE_STYLES[room.meta.roomType] ?? "bg-slate-100 text-slate-600")}>{room.meta.roomType}</span>}
+          {room.roomType && <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", ROOM_TYPE_STYLES[room.roomType] ?? "bg-slate-100 text-slate-600")}>{room.roomType}</span>}
         </p>
         {room.description && <p className="mt-2 text-sm text-slate-700">{room.description}</p>}
       </div>
@@ -232,17 +225,16 @@ function RoomDetail({ room, allRooms, canManage, canReserve }: { room: RoomView;
       <section>
         <div className="mb-2 flex items-center justify-between">
           <h4 className="text-sm font-semibold text-navy">Équipements</h4>
-          <Link href={`/resources?tab=equipment&room=${room.id}`} className="text-xs font-medium text-primary hover:underline">Voir tout ({room.equipment.length})</Link>
+          <Link href={`/resources?tab=equipment&room=${room.id}`} className="text-xs font-medium text-primary hover:underline">Voir tout ({room.amenities.length})</Link>
         </div>
         {chips.length === 0 ? (
-          <p className="text-xs text-slate-400">Aucun équipement affecté à cette salle.</p>
+          <p className="text-xs text-slate-400">Aucun équipement renseigné pour cette salle.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {chips.map(([c, n]) => (
+            {chips.map((c) => (
               <span key={c} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-navy">
                 <CategoryIcon category={c} className="size-3.5 text-primary" />
                 {c}
-                {n > 1 && <span className="text-slate-400">({n})</span>}
               </span>
             ))}
           </div>
@@ -274,9 +266,11 @@ function RoomDetail({ room, allRooms, canManage, canReserve }: { room: RoomView;
 
       <div className="grid grid-cols-2 gap-2">
         {canManage ? (
-          <Button type="button" variant="secondary" onClick={() => setEditing(true)} className="bg-blue-50 text-primary">
-            <Pencil className="size-4" />
-            Modifier
+          <Button asChild variant="secondary" className="bg-blue-50 text-primary">
+            <Link href={`/resources/${room.id}/edit`}>
+              <Pencil className="size-4" />
+              Modifier
+            </Link>
           </Button>
         ) : <span />}
         {canReserve && (
@@ -286,7 +280,6 @@ function RoomDetail({ room, allRooms, canManage, canReserve }: { room: RoomView;
           </Button>
         )}
       </div>
-      {editing && <ResourceFormDialog action={updateResource.bind(null, room.id)} resource={room.resource} rooms={allRooms} open onOpenChange={(o) => !o && setEditing(false)} />}
       {reserving && <ReserveDialog resourceId={room.id} resourceName={room.name} open onOpenChange={(o) => !o && setReserving(false)} />}
     </aside>
   );

@@ -3,7 +3,6 @@ import { and, asc, count, eq, gte, lt, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { profiles, resourceReservations, resources } from "@/lib/db/schema";
-import { readMeta, type ResourceMeta } from "@/features/resources/schemas";
 
 export async function getResources(organizationId: string) {
   const rows = await db
@@ -68,9 +67,12 @@ export interface RoomView {
   description: string | null;
   location: string | null;
   /** Statut affiché : « Réservée » = une réservation active couvre l'instant présent. */
-  displayStatus: "available" | "reserved" | "maintenance" | "retired";
-  meta: ResourceMeta;
-  resource: ResourceRowData;
+  displayStatus: "available" | "reserved" | "maintenance" | "retired" | "draft";
+  capacity: number | null;
+  roomType: string | null;
+  photos: string[];
+  /** Équipements cochés dans le formulaire de la salle + catégories des équipements qui y sont installés (sans doublon). */
+  amenities: string[];
   equipment: { id: string; name: string; category: string | null; quantity: number }[];
   upcoming: ReservationEntry[];
 }
@@ -85,38 +87,43 @@ function hoursWithin(r: { startsAt: Date; endsAt: Date }, from: number, to: numb
 }
 
 /** Données de la page « Salles & équipements » : salles enrichies, équipements, réservations et KPI. */
-export async function getResourcesOverview(organizationId: string) {
+export async function getResourcesOverview(organizationId: string, canManage: boolean) {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-  const [all, reservations] = await Promise.all([
+  const [allRows, reservations] = await Promise.all([
     getResources(organizationId),
     // 60 jours en arrière (taux d'occupation, mois précédent) jusqu'à 1 an devant (réservations à venir).
     getReservationsBetween(organizationId, new Date(now.getTime() - 62 * DAY), new Date(now.getTime() + 365 * DAY)),
   ]);
 
+  // Les brouillons ne sont visibles que des gestionnaires et ne comptent dans aucun indicateur.
+  const all = canManage ? allRows : allRows.filter((r) => r.status !== "draft");
+  const live = all.filter((r) => r.status !== "draft");
   const active = reservations.filter((r) => r.status !== "cancelled");
   const roomRows = all.filter((r) => r.type === "room");
   const otherRows = all.filter((r) => r.type !== "room");
+  const liveRooms = live.filter((r) => r.type === "room");
+  const liveOthers = live.filter((r) => r.type !== "room");
 
   const rooms: RoomView[] = roomRows.map((room) => {
-    const meta = readMeta(room.metadata);
     const mine = active.filter((r) => r.resourceId === room.id);
     const busyNow = mine.some((r) => r.startsAt <= now && r.endsAt > now);
-    const displayStatus = room.status === "maintenance" ? "maintenance" : room.status === "retired" ? "retired" : busyNow ? "reserved" : "available";
+    const displayStatus = room.status === "draft" ? "draft" : room.status === "maintenance" ? "maintenance" : room.status === "retired" ? "retired" : busyNow ? "reserved" : "available";
+    const installed = otherRows.filter((e) => e.roomId === room.id);
     return {
       id: room.id,
       name: room.name,
       description: room.description,
       location: room.location,
       displayStatus,
-      meta,
-      resource: room,
-      equipment: otherRows
-        .filter((e) => readMeta(e.metadata).roomId === room.id)
-        .map((e) => ({ id: e.id, name: e.name, category: readMeta(e.metadata).category, quantity: e.quantity })),
+      capacity: room.capacity,
+      roomType: room.roomType,
+      photos: room.photos,
+      amenities: [...new Set([...room.amenities, ...installed.map((e) => e.category).filter((c): c is string => Boolean(c))])],
+      equipment: installed.map((e) => ({ id: e.id, name: e.name, category: e.category, quantity: e.quantity })),
       upcoming: mine.filter((r) => r.endsAt > now).slice(0, 3),
     };
   });
@@ -126,8 +133,8 @@ export async function getResourcesOverview(organizationId: string) {
   const lastMonth = active.filter((r) => inMonth(r, prevMonthStart, monthStart)).length;
 
   // Taux d'occupation : heures réservées des salles sur 30 jours / (salles en service × 30 j × 12 h).
-  const usableRooms = roomRows.filter((r) => r.status === "available").length;
-  const roomIds = new Set(roomRows.map((r) => r.id));
+  const usableRooms = liveRooms.filter((r) => r.status === "available").length;
+  const roomIds = new Set(liveRooms.map((r) => r.id));
   const occupancy = (from: number, to: number) => {
     if (usableRooms === 0) return null;
     const hours = active.filter((r) => roomIds.has(r.resourceId)).reduce((sum, r) => sum + hoursWithin(r, from, to), 0);
@@ -144,8 +151,8 @@ export async function getResourcesOverview(organizationId: string) {
     roomNames: new Map(roomRows.map((r) => [r.id, r.name])),
     reservations: reservations.sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime()),
     kpis: {
-      rooms: { value: roomRows.length, delta: createdThisMonth(roomRows).length },
-      equipment: { value: otherRows.reduce((s, r) => s + r.quantity, 0), delta: createdThisMonth(otherRows).reduce((s, r) => s + r.quantity, 0) },
+      rooms: { value: liveRooms.length, delta: createdThisMonth(liveRooms).length },
+      equipment: { value: liveOthers.reduce((s, r) => s + r.quantity, 0), delta: createdThisMonth(liveOthers).reduce((s, r) => s + r.quantity, 0) },
       reservations: { value: thisMonth, growthPct: lastMonth > 0 ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100) : null },
       occupancy: { value: occupancyNow, delta: occupancyNow !== null && occupancyBefore !== null ? occupancyNow - occupancyBefore : null },
     },

@@ -2,6 +2,10 @@ import { z } from "zod";
 
 const optionalString = z.string().nullish().transform((v) => v ?? "");
 const datetimeString = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, "Date et heure requises");
+const optionalDate = z
+  .union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide"), z.literal("")])
+  .nullish()
+  .transform((v) => v ?? "");
 
 export const RESOURCE_TYPE_LABELS: Record<string, string> = {
   room: "Salle",
@@ -13,7 +17,8 @@ export const RESOURCE_TYPE_LABELS: Record<string, string> = {
 export const RESOURCE_STATUS_LABELS: Record<string, string> = {
   available: "Disponible",
   maintenance: "En maintenance",
-  retired: "Retiré",
+  retired: "Indisponible",
+  draft: "Brouillon",
 };
 
 export const RESERVATION_STATUS_LABELS: Record<string, string> = {
@@ -23,7 +28,7 @@ export const RESERVATION_STATUS_LABELS: Record<string, string> = {
   completed: "Terminée",
 };
 
-/** Types de salle (affichés en pastille colorée, `metadata.roomType`). */
+/** Types de salle (pastille colorée). */
 export const ROOM_TYPES = ["Culte", "Prière", "Réunion", "Formation", "Jeunesse", "Enfants", "Événement"] as const;
 export const ROOM_TYPE_STYLES: Record<string, string> = {
   Culte: "bg-blue-100 text-blue-700",
@@ -35,46 +40,95 @@ export const ROOM_TYPE_STYLES: Record<string, string> = {
   Événement: "bg-teal-100 text-teal-700",
 };
 
-/** Catégories d'équipement (`metadata.category`). */
-export const EQUIPMENT_CATEGORIES = ["Sono", "Écrans", "Microphones", "Climatisation", "Projecteur", "Chaises", "Tables", "Autres"] as const;
+/** Localisations proposées pour une salle. */
+export const ROOM_LOCATIONS = ["Rez-de-chaussée", "1er étage", "2ème étage", "3ème étage", "Sous-sol", "Annexe", "Extérieur"] as const;
 
-/**
- * Champs propres aux salles / équipements, rangés dans `resources.metadata` (aucune migration) :
- * salle → `capacity`, `roomType`, `photos` ; équipement → `category`, `roomId` (salle où il est installé).
- */
-export interface ResourceMeta {
-  capacity: number | null;
-  roomType: string | null;
-  photos: string[];
-  category: string | null;
-  roomId: string | null;
+export const RESERVABLE_BY_LABELS: Record<string, string> = {
+  members: "Tous les membres",
+  leaders: "Responsables uniquement",
+  admins: "Administrateurs uniquement",
+};
+
+/** Équipements cochables d'une salle (mêmes libellés que les catégories d'équipement). */
+export const AMENITIES = ["Sono", "Écrans / TV", "Projecteur", "Microphones", "Climatisation", "Chaises", "Tables", "Estrade", "Pupitre", "Tableau blanc", "Connexion Internet", "Autres équipements"] as const;
+export const EQUIPMENT_CATEGORIES = AMENITIES;
+
+export const CONDITION_LABELS: Record<string, string> = {
+  new: "Neuf",
+  good: "En bon état",
+  worn: "Usé",
+  to_repair: "À réparer",
+  out_of_service: "Hors service",
+};
+export const CONDITION_STYLES: Record<string, string> = {
+  new: "bg-blue-100 text-blue-700",
+  good: "bg-success/10 text-success",
+  worn: "bg-amber-100 text-amber-700",
+  to_repair: "bg-orange-100 text-orange-700",
+  out_of_service: "bg-red-100 text-red-600",
+};
+
+export const RESOURCE_PHOTO_BUCKET = "churchos-resources";
+export const RESOURCE_DOC_BUCKET = "churchos-resource-docs";
+export const RESOURCE_FILE_MAX_BYTES = 5 * 1024 * 1024;
+export const PHOTO_MIME_EXTENSIONS: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+export const DOC_MIME_EXTENSIONS: Record<string, string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png" };
+export const MAX_PHOTOS = 8;
+export const MAX_DOCUMENTS = 5;
+
+/** Chemin Storage d'une photo de NOTRE bucket public (sinon `null`). */
+export function resourcePhotoPath(url: string | null | undefined) {
+  const marker = `/object/public/${RESOURCE_PHOTO_BUCKET}/`;
+  const i = url?.indexOf(marker) ?? -1;
+  return url && i >= 0 ? decodeURIComponent(url.slice(i + marker.length)) : null;
 }
 
-export function readMeta(metadata: unknown): ResourceMeta {
-  const m = (metadata ?? {}) as Record<string, unknown>;
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
-  return {
-    capacity: typeof m.capacity === "number" && m.capacity > 0 ? m.capacity : null,
-    roomType: str(m.roomType),
-    photos: Array.isArray(m.photos) ? m.photos.filter((p): p is string => typeof p === "string" && /^https?:\/\//.test(p)) : [],
-    category: str(m.category),
-    roomId: str(m.roomId),
-  };
+export interface ResourceDocument {
+  path: string;
+  name: string;
+  mime: string;
+  size: number;
 }
 
-export const resourceSchema = z.object({
-  name: z.string().min(1, "Nom requis"),
-  type: z.enum(["room", "equipment", "vehicle", "other"]).default("room"),
-  description: optionalString,
-  quantity: optionalString,
-  location: optionalString,
-  status: z.enum(["available", "maintenance", "retired"]).default("available"),
-  capacity: optionalString,
-  roomType: optionalString,
-  category: optionalString,
-  roomId: optionalString,
+const status = z.enum(["available", "maintenance", "retired"]);
+
+export const roomSchema = z.object({
+  name: z.string().trim().min(1, "Le nom de la salle est requis.").max(100, "Nom : 100 caractères maximum"),
+  description: z.string().trim().max(500, "Description : 500 caractères maximum").default(""),
+  roomType: z.enum(ROOM_TYPES, { message: "Le type de salle est requis." }),
+  capacity: z.coerce.number({ message: "La capacité est requise." }).int("Capacité invalide.").min(1, "La capacité doit être d'au moins 1.").max(100000, "Capacité trop élevée."),
+  location: z.string().trim().min(1, "La localisation est requise.").max(100),
+  status,
+  reservableBy: z.enum(["members", "leaders", "admins"]),
+  allowReservations: z.boolean(),
+  requiresApproval: z.boolean(),
+  publicCalendar: z.boolean(),
+  amenities: z.array(z.enum(AMENITIES)).default([]),
+  internalNotes: z.string().trim().max(500, "Notes : 500 caractères maximum").default(""),
+  /** `draft` : enregistre sans mettre en service (statut « Brouillon »). */
+  mode: z.enum(["draft", "create"]),
 });
-export type ResourceInput = z.infer<typeof resourceSchema>;
+export type RoomInput = z.infer<typeof roomSchema>;
+
+export const equipmentSchema = z.object({
+  name: z.string().trim().min(1, "Le nom de l'équipement est requis.").max(100, "Nom : 100 caractères maximum"),
+  category: z.enum(EQUIPMENT_CATEGORIES, { message: "La catégorie est requise." }),
+  quantity: z.coerce.number().int().min(1, "Quantité : au moins 1.").max(100000).default(1),
+  description: z.string().trim().max(500, "Description : 500 caractères maximum").default(""),
+  brand: z.string().trim().max(100).default(""),
+  model: z.string().trim().max(100).default(""),
+  serialNumber: z.string().trim().max(100).default(""),
+  condition: z.enum(["new", "good", "worn", "to_repair", "out_of_service"], { message: "L'état actuel est requis." }),
+  purchaseDate: optionalDate,
+  purchaseValue: z.string().trim().default(""),
+  roomId: z.string().default(""),
+  responsiblePersonId: z.string().default(""),
+  warrantyEnd: optionalDate,
+  supplier: z.string().trim().max(150).default(""),
+  invoiceReference: z.string().trim().max(100).default(""),
+  mode: z.enum(["draft", "create"]),
+});
+export type EquipmentInput = z.infer<typeof equipmentSchema>;
 
 export const reservationSchema = z.object({
   startsAt: datetimeString,
