@@ -45,8 +45,7 @@ export default async function AttendancePage({
         <PageHero
           title="Présences"
           description="Suivez la participation aux cultes, réunions et activités de l'église."
-          quote="Car là où deux ou trois sont assemblés en mon nom, je suis au milieu d'eux."
-          verseRef="Matthieu 18:20"
+          verseContext="attendance"
         />
         <PermissionDenied requiredPermission="attendance.view" />
       </div>
@@ -89,8 +88,7 @@ export default async function AttendancePage({
       <PageHero
         title="Présences"
         description="Suivez la participation aux cultes, réunions et activités de l'église."
-        quote="Car là où deux ou trois sont assemblés en mon nom, je suis au milieu d'eux."
-        verseRef="Matthieu 18:20"
+        verseContext="attendance"
         cta={{ icon: HeartHandshake, line1: "Chaque présence compte", line2: "pour bâtir une église vivante." }}
       />
 

@@ -42,8 +42,7 @@ export default async function MinistriesPage({
         <PageHero
           title="Ministères"
           description="Découvrez, organisez et développez les différents ministères de l'église."
-          quote="Il y a diversité de dons, mais le même Esprit."
-          verseRef="1 Corinthiens 12:4"
+          verseContext="ministries"
         />
         <PermissionDenied requiredPermission="ministries.view" />
       </div>
@@ -84,8 +83,7 @@ export default async function MinistriesPage({
       <PageHero
         title="Ministères"
         description="Découvrez, organisez et développez les différents ministères de l'église."
-        quote="Il y a diversité de dons, mais le même Esprit."
-        verseRef="1 Corinthiens 12:4"
+        verseContext="ministries"
       />
 
       <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${canSeeEvents ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>

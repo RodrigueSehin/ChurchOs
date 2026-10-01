@@ -217,7 +217,8 @@ si 100 Mo est refusé.
 
 - Écarts avec la maquette : pas de bouton « Filtres » séparé (les filtres sont affichés), pas de durée,
   des vidéos/audios (le formulaire n'en contient pas : la taille est affichée), « Année de publication » est un
-  champ date, pas de modification d'une ressource existante (ajout / suppression seulement).
+  champ date.
+- **Modification** : l'administrateur et le propriétaire de l'église (rôles `SUPER_ADMIN` / `CHURCH_OWNER`, `isAdmin`) voient « Modifier » dans le menu ⋮ de chaque carte et sur la page de lecture ; le formulaire est pré-rempli, le fichier et la couverture ne sont remplacés que si on en choisit de nouveaux (couverture retirable), les anciens fichiers sont supprimés après coup. Le droit est revérifié côté serveur (`updateResource`). Les autres gestionnaires de formation peuvent ajouter et supprimer mais pas modifier.
 - Le compteur de vues s'incrémente à l'ouverture, celui de téléchargements au téléchargement.
 
 **Formats : PDF et DOCX uniquement** (formulaire, bucket Storage et filtres ; les types vidéo/audio ont été
@@ -231,6 +232,52 @@ Les mises en page très riches d'un DOCX (colonnes, zones de texte, en-têtes) n
 l'identique par l'aperçu ; le téléchargement donne le fichier d'origine.
 
 Vérifié par typecheck/lint/build uniquement.
+
+### Versets du jour
+
+Chaque bannière de page affiche un verset (Louis Segond) qui change chaque jour **et** correspond au
+sujet de la page : `src/lib/verses.ts` contient une liste thématique par contexte (membres, familles,
+visiteurs, groupes, pastoral, prière, visites, conseil pastoral, ministères, ouvriers, services,
+plannings, événements, inscriptions, calendrier, présences, dons, finances, formations, certifications,
+bibliothèque, tableau de bord, connexion, création d'église — 7 à 8 versets chacune).
+`getDailyVerse(contexte, slot?)` choisit de façon déterministe (jour UTC = heure d'Abidjan, décalage propre
+à chaque contexte) : même verset toute la journée pour tout le monde, rien à stocker. `PageHero` prend
+`verseContext` ; les versets secondaires (cartes latérales de Services, Prière, Ouvriers, Formations)
+utilisent `slot = 1` pour différer du verset de la bannière. Les layouts de connexion/création d'église
+appellent `connection()` pour ne pas figer le verset au build. Pour ajouter un verset, l'ajouter à la
+liste du contexte concerné.
+
+### Annonces et messages (`/communication`) et « Nouvelle annonce »
+
+**Page** : bannière avec « Nouvelle annonce », 4 KPI (annonces publiées, messages envoyés, membres touchés,
+taux de lecture moyen = lecteurs distincts / membres actifs, moyenné sur les annonces publiées), onglets
+Toutes / Annonces / Messages / Brouillons / Planifiées, tableau unifié annonces + messages (vignette, type,
+destinataires, date, statut, vues, actions Lire / Modifier / Supprimer), panneaux Répartition par type,
+Destinataires et Annonces récentes. Les « vues » d'une annonce comptent les utilisateurs qui l'ont ouverte
+(`announcement_reads`, une fois chacun) ; pour un message, les destinataires l'ayant lu. Une annonce
+programmée dont l'heure est passée est affichée comme publiée (aucune tâche planifiée requise). Les anciens
+onglets (Modèles, Composer, Historique) restent accessibles par les liens sous les onglets.
+
+**Formulaire** (`/communication/new`, `/communication/[id]/edit`) : 4 sections (infos : titre, type, catégorie,
+importance, contenu avec mise en forme **gras** / _italique_ / ++souligné++ / listes / liens ; médias :
+image 5 Mo, vidéo MP4 ou document PDF/DOCX 50 Mo, envoi direct navigateur → Storage ; destinataires : tous
+ou groupes/ministères ; publication : immédiate, brouillon ou programmée) + aperçus de l'annonce et des
+réseaux sociaux.
+
+**Publication sur les réseaux sociaux** (Paramètres > Réseaux sociaux, `/settings/social`, admin/propriétaire) :
+- **Facebook (Page)** et **Instagram (compte Business)** via la Graph API de Meta : on connecte un compte en
+  saisissant son identifiant et un jeton d'accès longue durée ; le couple est vérifié auprès de Meta, le jeton
+  est **chiffré** (AES-256-GCM, variable `SOCIAL_TOKEN_KEY` = `openssl rand -base64 32`, à ajouter sur Vercel)
+  puis stocké ; il ne quitte jamais le serveur. Facebook : publication immédiate ou programmation native (10 min
+  à 30 jours). Instagram : image obligatoire, pas de programmation (limite de l'API).
+- **WhatsApp** : pas d'API de publication vers un groupe ; le bouton ouvre WhatsApp avec le texte prérempli.
+- **YouTube** : indisponible (l'API ne permet pas de publier du texte), affiché comme tel dans le formulaire.
+- La publication sociale est tentée après l'enregistrement : un échec chez Meta est affiché par compte
+  (`announcement_social_posts`) sans annuler l'annonce. Non testée contre les vraies API (aucun jeton ici).
+
+**Migrations à appliquer** : [`2026-10-08-announcements-redesign.sql`](db/migrations/2026-10-08-announcements-redesign.sql)
+et [`2026-10-09-announcement-composer.sql`](db/migrations/2026-10-09-announcement-composer.sql) (idempotentes,
+incluses dans `db/schema.sql`).
 
 ### Reste à faire
 

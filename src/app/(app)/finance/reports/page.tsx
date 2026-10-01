@@ -25,8 +25,7 @@ export default async function FinanceReportsPage({
     <PageHero
       title="Rapports financiers"
       description="Suivez et analysez la situation financière de votre église."
-      quote="Que tout se fasse avec bienséance et avec ordre."
-      verseRef="1 Corinthiens 14:40"
+      verseContext="finance"
     />
   );
 

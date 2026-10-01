@@ -25,6 +25,7 @@ import {
   GraduationCap,
   Award,
   Library,
+  Share2,
   Megaphone,
   FolderOpen,
   Warehouse,
@@ -136,6 +137,7 @@ export const settingsNav: NavItem[] = [
   { title: "Rôles", href: "/settings/roles", icon: ShieldCheck, phase: 4 },
   { title: "Facturation", href: "/settings/billing", icon: Receipt, phase: 14 },
   { title: "Notifications", href: "/settings/notifications", icon: Megaphone, phase: 11 },
+  { title: "Réseaux sociaux", href: "/settings/social", icon: Share2, phase: 11 },
 ];
 
 export function findNavItemByHref(href: string): NavItem | undefined {

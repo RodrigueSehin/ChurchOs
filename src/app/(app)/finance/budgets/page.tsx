@@ -79,8 +79,7 @@ export default async function BudgetsPage({
     <PageHero
       title="Budgets"
       description="Planifiez, suivez et maîtrisez les budgets de votre église."
-      quote="Que tout se fasse avec bienséance et avec ordre."
-      verseRef="1 Corinthiens 14:40"
+      verseContext="finance"
     />
   );
 

@@ -23,8 +23,7 @@ function n(value: number) {
 const HERO = {
   title: "Bibliothèque",
   description: "Accédez à une riche collection de ressources pour grandir dans la foi et servir efficacement.",
-  quote: "Ta parole est une lampe à mes pieds et une lumière sur mon sentier.",
-  verseRef: "Psaumes 119:105",
+  verseContext: "library" as const,
 };
 
 const CATEGORY_COLORS = ["bg-blue-500", "bg-purple-500", "bg-amber-400", "bg-red-400", "bg-green-500", "bg-violet-400"];
@@ -137,7 +136,14 @@ export default async function LibraryPage({
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {list.rows.map((resource) => (
-                  <ResourceCard key={resource.id} resource={resource} canManage={canManage} />
+                  <ResourceCard
+                    key={resource.id}
+                    resource={resource}
+                    canManage={canManage}
+                    canEdit={check.context.isAdmin}
+                    organizationId={organizationId}
+                    categories={categories}
+                  />
                 ))}
               </div>
             )}

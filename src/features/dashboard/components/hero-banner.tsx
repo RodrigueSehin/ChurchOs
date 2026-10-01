@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 import churchImage from "@/img/eglise.png";
+import { getDailyVerse } from "@/lib/verses";
 
 function formatToday() {
   const label = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
@@ -8,6 +9,8 @@ function formatToday() {
 }
 
 export function HeroBanner({ firstName, organizationName }: { firstName: string; organizationName: string }) {
+  const verse = getDailyVerse("dashboard");
+
   return (
     <div className="relative isolate overflow-hidden rounded-2xl">
       <Image src={churchImage} alt="" fill priority className="-z-10 object-cover" sizes="100vw" />
@@ -24,11 +27,8 @@ export function HeroBanner({ firstName, organizationName }: { firstName: string;
           </div>
 
           <div className="text-right text-white/90">
-            <p className="italic">
-              « Car tout se fait avec bienséance
-              <br className="hidden sm:block" /> et avec ordre. »
-            </p>
-            <p className="mt-1 text-sm text-white/60">1 Corinthiens 14:40</p>
+            <p className="max-w-sm italic">« {verse.text} »</p>
+            <p className="mt-1 text-sm text-white/60">{verse.ref}</p>
           </div>
         </div>
 

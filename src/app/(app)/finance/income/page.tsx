@@ -47,8 +47,7 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
     <PageHero
       title="Dons & offrandes"
       description="Gérez les dons, offrandes et contributions de votre église."
-      quote="Chacun donne comme il l'a décidé dans son cœur, sans regret et sans contrainte, car Dieu aime celui qui donne avec joie."
-      verseRef="2 Corinthiens 9:7"
+      verseContext="giving"
       cta={{ icon: Gift, line1: "Un peuple qui donne,", line2: "une œuvre qui avance." }}
     />
   );

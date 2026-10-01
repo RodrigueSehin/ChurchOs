@@ -34,8 +34,7 @@ export default async function CalendarPage({
         <PageHero
           title="Calendrier"
           description="Visualisez et gérez tous les événements, réunions et activités de l'église."
-          quote="Tout se fait avec bienséance et avec ordre."
-          verseRef="1 Corinthiens 14:40"
+          verseContext="calendar"
         />
         <PermissionDenied requiredPermission="calendar.view" />
       </div>
@@ -82,8 +81,7 @@ export default async function CalendarPage({
       <PageHero
         title="Calendrier"
         description="Visualisez et gérez tous les événements, réunions et activités de l'église."
-        quote="Tout se fait avec bienséance et avec ordre."
-        verseRef="1 Corinthiens 14:40"
+        verseContext="calendar"
         cta={{ icon: CalendarRange, line1: "Un agenda pour une église", line2: "plus connectée et plus efficace." }}
       />
 

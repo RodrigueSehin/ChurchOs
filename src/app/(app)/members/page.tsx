@@ -40,8 +40,7 @@ export default async function MembersPage({
         <PageHero
           title="Membres"
           description="Gérez vos membres, familles, visiteurs et groupes."
-          quote="Vous êtes tous membres les uns des autres."
-          verseRef="Éphésiens 4:25"
+          verseContext="members"
         />
         <PermissionDenied requiredPermission="members.view" />
       </div>
@@ -85,8 +84,7 @@ export default async function MembersPage({
       <PageHero
         title="Membres"
         description="Gérez vos membres, familles, visiteurs et groupes. Une communauté plus connectée pour un plus grand impact."
-        quote="Vous êtes tous membres les uns des autres."
-        verseRef="Éphésiens 4:25"
+        verseContext="members"
         cta={{ icon: HeartHandshake, line1: "Bâtir une communauté", line2: "qui fait la différence." }}
       />
 

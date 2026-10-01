@@ -42,8 +42,7 @@ export default async function RegistrationsPage({
         <PageHero
           title="Inscriptions"
           description="Gérez les inscriptions à vos événements et suivez la participation."
-          quote="Que tout se fasse avec bienséance et avec ordre."
-          verseRef="1 Corinthiens 14:40"
+          verseContext="registrations"
         />
         <PermissionDenied requiredPermission="registrations.view" />
       </div>
@@ -82,8 +81,7 @@ export default async function RegistrationsPage({
       <PageHero
         title="Inscriptions"
         description="Gérez les inscriptions à vos événements et suivez la participation."
-        quote="Que tout se fasse avec bienséance et avec ordre."
-        verseRef="1 Corinthiens 14:40"
+        verseContext="registrations"
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -39,8 +39,7 @@ export default async function VisitorsPage({
         <PageHero
           title="Visiteurs"
           description="Accueillez, suivez et accompagnez vos visiteurs avec amour et efficacité."
-          quote="N'oubliez pas l'hospitalité, car c'est par elle que quelques-uns, à leur insu, ont logé des anges."
-          verseRef="Hébreux 13:2"
+          verseContext="visitors"
         />
         <PermissionDenied requiredPermission="members.view" />
       </div>
@@ -77,8 +76,7 @@ export default async function VisitorsPage({
       <PageHero
         title="Visiteurs"
         description="Accueillez, suivez et accompagnez vos visiteurs avec amour et efficacité."
-        quote="N'oubliez pas l'hospitalité, car c'est par elle que quelques-uns, à leur insu, ont logé des anges."
-        verseRef="Hébreux 13:2"
+        verseContext="visitors"
         cta={{ icon: HeartHandshake, line1: "Chaque visiteur compte !", line2: "Accueillir aujourd'hui, bâtir demain." }}
       />
 

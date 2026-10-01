@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bookmark, Download, Eye, FileText, Film, Headphones, ImageIcon, MoreVertical, Star, Trash2 } from "lucide-react";
+import { Bookmark, Download, Eye, FileText, Film, Headphones, ImageIcon, MoreVertical, Pencil, Star, Trash2 } from "lucide-react";
 
+import { ResourceFormDialog } from "@/features/library/components/resource-form-dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { deleteResource, rateResource, toggleBookmark } from "@/features/library/actions";
@@ -23,7 +24,20 @@ function KindIcon({ mime, className }: { mime: string | null | undefined; classN
 
 /** Carte d'une ressource : couverture, catégorie, titre, auteur, format, compteurs et actions
  * (ouvrir, favori, télécharger, menu : noter / supprimer). */
-export function ResourceCard({ resource, canManage }: { resource: Resource; canManage: boolean }) {
+export function ResourceCard({
+  resource,
+  canManage,
+  canEdit,
+  organizationId,
+  categories,
+}: {
+  resource: Resource;
+  canManage: boolean;
+  /** Administrateur / propriétaire de l'église : peut corriger les informations de la ressource. */
+  canEdit: boolean;
+  organizationId: string;
+  categories: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +147,19 @@ export function ResourceCard({ resource, canManage }: { resource: Resource; canM
                     </button>
                   ))}
                 </div>
+                {canEdit && (
+                  <ResourceFormDialog
+                    organizationId={organizationId}
+                    categories={categories}
+                    resource={resource}
+                    trigger={
+                      <button type="button" className="mt-1 flex w-full items-center gap-2 rounded px-1 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
+                        <Pencil className="size-4" />
+                        Modifier
+                      </button>
+                    }
+                  />
+                )}
                 {canManage && (
                   <ConfirmDialog
                     trigger={

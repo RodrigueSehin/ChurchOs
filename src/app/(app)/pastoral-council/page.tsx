@@ -23,8 +23,7 @@ export default async function PastoralCouncilPage({ searchParams }: { searchPara
         <PageHero
           title="Conseil pastoral"
           description="Accompagner avec sagesse, écouter avec amour, orienter selon la Parole de Dieu."
-          quote="Là où il n'y a pas de conseil, les desseins échouent ; mais la multitude des conseillers les fait réussir."
-          verseRef="Proverbes 15:22"
+          verseContext="council"
         />
         <PermissionDenied requiredPermission="pastoral_council.view" />
       </div>
@@ -49,8 +48,7 @@ export default async function PastoralCouncilPage({ searchParams }: { searchPara
       <PageHero
         title="Conseil pastoral"
         description="Accompagner avec sagesse, écouter avec amour, orienter selon la Parole de Dieu."
-        quote="Là où il n'y a pas de conseil, les desseins échouent ; mais la multitude des conseillers les fait réussir."
-        verseRef="Proverbes 15:22"
+        verseContext="council"
         cta={{ icon: Users, line1: "Conseiller. Écouter. Orienter.", line2: "Pour des vies transformées." }}
       />
 

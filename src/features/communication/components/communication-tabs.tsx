@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { key: "announcements", label: "Annonces" },
+  { key: "announcements", label: "Annonces & messages" },
   { key: "templates", label: "Modèles" },
   { key: "compose", label: "Composer" },
   { key: "history", label: "Historique" },

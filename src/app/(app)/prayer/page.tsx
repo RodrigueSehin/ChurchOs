@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Clock, HandHeart, Plus } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { getDailyVerse } from "@/lib/verses";
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
@@ -31,8 +32,7 @@ export default async function PrayerPage({
         <PageHero
           title="Sujets de prières"
           description="Centralisez, suivez et priez ensemble pour les sujets qui comptent."
-          quote="Persévérez dans la prière, veillez-y avec actions de grâces."
-          verseRef="Colossiens 4:2"
+          verseContext="prayer"
         />
         <PermissionDenied requiredPermission="prayer.view" />
       </div>
@@ -69,13 +69,14 @@ export default async function PrayerPage({
 
   const hasFilters = Boolean(params.q || params.status || params.category || params.view);
 
+  const sideVerse = getDailyVerse("prayer", 1);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHero
         title="Sujets de prières"
         description="Centralisez, suivez et priez ensemble pour les sujets qui comptent."
-        quote="Persévérez dans la prière, veillez-y avec actions de grâces."
-        verseRef="Colossiens 4:2"
+        verseContext="prayer"
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -112,8 +113,8 @@ export default async function PrayerPage({
           periodLabel="vs mois dernier"
         />
         <div className="flex flex-col justify-center rounded-xl border border-slate-200 bg-white p-5">
-          <p className="italic text-slate-600">« Demandez, et l&apos;on vous donnera ; cherchez, et l&apos;on vous trouvera ; frappez, et l&apos;on vous ouvrira. »</p>
-          <p className="mt-2 text-xs text-slate-400">Matthieu 7:7</p>
+          <p className="italic text-slate-600">« {sideVerse.text} »</p>
+          <p className="mt-2 text-xs text-slate-400">{sideVerse.ref}</p>
         </div>
       </div>
 

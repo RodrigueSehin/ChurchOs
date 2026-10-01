@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CheckCircle2, HardHat, Link2, UserPlus, UsersRound, UserX } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { getDailyVerse } from "@/lib/verses";
 import { PageHero } from "@/components/shared/page-hero";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { PermissionDenied } from "@/components/shared/permission-denied";
@@ -42,8 +43,7 @@ export default async function WorkersPage({
         <PageHero
           title="Ouvriers"
           description="Des hommes et des femmes au service de la vision de Dieu."
-          quote="Car nous sommes collaborateurs de Dieu."
-          verseRef="1 Corinthiens 3:9"
+          verseContext="workers"
         />
         <PermissionDenied requiredPermission="workers.view" />
       </div>
@@ -79,13 +79,14 @@ export default async function WorkersPage({
 
   const hasFilters = Boolean(params.q || params.status || params.affiliation);
 
+  const sideVerse = getDailyVerse("workers", 1);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHero
         title="Ouvriers"
         description="Des hommes et des femmes au service de la vision de Dieu."
-        quote="Car nous sommes collaborateurs de Dieu."
-        verseRef="1 Corinthiens 3:9"
+        verseContext="workers"
         cta={{ icon: UsersRound, line1: "Servir ensemble,", line2: "pour un plus grand impact." }}
       />
 
@@ -226,9 +227,9 @@ export default async function WorkersPage({
           <Card>
             <CardContent className="pt-5">
               <p className="italic text-slate-600">
-                « Que chacun mette au service des autres le don qu&apos;il a reçu. »
+                « {sideVerse.text} »
               </p>
-              <p className="mt-2 text-xs text-slate-400">1 Pierre 4:10</p>
+              <p className="mt-2 text-xs text-slate-400">{sideVerse.ref}</p>
             </CardContent>
           </Card>
         </div>
