@@ -15,3 +15,4 @@ export * from "./documents";
 export * from "./ai";
 export * from "./audit";
 export * from "./platform";
+export * from "./library";

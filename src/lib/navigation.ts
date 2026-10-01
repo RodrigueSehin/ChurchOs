@@ -24,6 +24,7 @@ import {
   FileBarChart,
   GraduationCap,
   Award,
+  Library,
   Megaphone,
   FolderOpen,
   Warehouse,
@@ -101,6 +102,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: "Cours & discipolat", href: "/training", icon: GraduationCap, phase: 10 },
       { title: "Certifications", href: "/training/certifications", icon: Award, phase: 10 },
+      { title: "Bibliothèque", href: "/library", icon: Library, phase: 10 },
     ],
   },
   {

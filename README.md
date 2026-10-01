@@ -198,6 +198,40 @@ navigateur → Storage, téléchargement par URL signée).
 
 Vérifié par typecheck/lint/build uniquement.
 
+### Bibliothèque (`/library`)
+
+Entrée « Bibliothèque » sous Formations. Page d'après la maquette : bannière (Psaumes 119:105) avec
+« Catégories » (gestion) et « Ajouter une ressource », 4 KPI (ressources avec variation vs mois dernier,
+catégories, téléchargements, note moyenne), onglets par type (Livres, Études bibliques, Enseignements,
+Documents, Vidéos, Audios), recherche (titre, auteur, description, tags), filtres catégorie / format / tri
++ « Mes favoris », cartes (couverture, catégorie, auteur, format · taille, vues, téléchargements, favori,
+téléchargement, menu : noter 1–5 / supprimer), colonne latérale Catégories (avec compteurs) et Ressources
+populaires. Droits : `training.view` pour consulter, `training.manage` pour ajouter/supprimer/gérer les
+catégories ; les non-gestionnaires ne voient que les ressources publiées et « visibles par tous les membres ».
+**Migration à appliquer** : [`db/migrations/2026-10-06-library.sql`](db/migrations/2026-10-06-library.sql)
+(idempotente, incluse dans `db/schema.sql`) : tables `library_categories`, `library_resources`,
+`library_bookmarks`, `library_ratings`, buckets `churchos-library` (privé, fichiers jusqu'à 100 Mo, URL
+signées) et `churchos-library-covers` (public, 5 Mo). Les fichiers sont envoyés directement du navigateur vers
+Storage. Supabase plafonne aussi la taille par fichier au niveau du projet (Storage > Settings) : l'augmenter
+si 100 Mo est refusé.
+
+- Écarts avec la maquette : pas de bouton « Filtres » séparé (les filtres sont affichés), pas de durée,
+  des vidéos/audios (le formulaire n'en contient pas : la taille est affichée), « Année de publication » est un
+  champ date, pas de modification d'une ressource existante (ajout / suppression seulement).
+- Le compteur de vues s'incrémente à l'ouverture, celui de téléchargements au téléchargement.
+
+**Formats : PDF et DOCX uniquement** (formulaire, bucket Storage et filtres ; les types vidéo/audio ont été
+retirés). Cliquer une carte ouvre `/library/[id]` : un PDF s'affiche dans la page (servi par
+`/api/library/[id]/file`, relayé en flux depuis l'URL signée, depuis notre origine), un DOCX est converti
+en HTML (mammoth) puis filtré par liste blanche (sanitize-html) ; au-delà de 20 Mo ou en cas d'échec de
+lecture, un message invite à télécharger. « Télécharger » (carte et page de lecture) passe par la même route
+(`?download=1`) et incrémente le compteur. Si `2026-10-06-library.sql` a déjà été exécutée, appliquer aussi
+[`2026-10-07-library-pdf-docx.sql`](db/migrations/2026-10-07-library-pdf-docx.sql) (restreint le bucket).
+Les mises en page très riches d'un DOCX (colonnes, zones de texte, en-têtes) ne sont pas reproduites à
+l'identique par l'aperçu ; le téléchargement donne le fichier d'origine.
+
+Vérifié par typecheck/lint/build uniquement.
+
 ### Reste à faire
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
