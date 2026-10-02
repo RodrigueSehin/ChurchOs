@@ -1,6 +1,9 @@
 import { Breadcrumb } from "@/components/shared/breadcrumb";
 import { Footer } from "@/components/shared/footer";
+import { cookies } from "next/headers";
+
 import { Sidebar } from "@/components/shared/sidebar";
+import { SIDEBAR_COOKIE } from "@/components/shared/sidebar-state";
 import { Topbar } from "@/components/shared/topbar";
 import { isPlatformAdmin } from "@/lib/auth/platform";
 import { redirect } from "next/navigation";
@@ -27,6 +30,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const access = await resolveMembershipContext(current.membership.id);
   const allowedHrefs = getAllowedNavHrefs(access.isAdmin, access.permissions);
 
+  const defaultCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "collapsed";
+
   const displayName =
     user.profile?.displayName ??
     [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(" ") ??
@@ -34,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-dvh overflow-hidden">
-      <Sidebar allowedHrefs={allowedHrefs} isPlatformAdmin={platformAdmin} organizationName={current.organization.name} organizationLogoUrl={current.organization.logoUrl} />
+      <Sidebar defaultCollapsed={defaultCollapsed} allowedHrefs={allowedHrefs} isPlatformAdmin={platformAdmin} organizationName={current.organization.name} organizationLogoUrl={current.organization.logoUrl} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           allowedHrefs={allowedHrefs}

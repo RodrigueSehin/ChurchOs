@@ -404,6 +404,13 @@ pas les salles, et inversement ; les brouillons ne sont visibles que de qui gèr
 et `library.view`, `communication.view` → `messages.view` + `media.view`, `resources.*` → `rooms.*` + `equipment.*`, etc.) puis supprime `communication.send` et `resources.*`. À exécuter AVANT
 de déployer : sans elle, les rôles personnalisés perdent l'accès à ces modules (les administrateurs gardent tout) et la matrice n'affiche pas les nouvelles lignes.
 
+### Menu latéral réductible
+
+Sur écran large, un bouton rond au bord du menu (icône panneau, info-bulle « Réduire / Agrandir le menu ») le réduit aux icônes seules (64 px, avec info-bulles) ou le
+ré-agrandit (256 px), avec une transition de largeur. L'état est mémorisé dans le cookie `churchos-sidebar` (lu par le layout : aucun saut d'affichage au chargement, y
+compris après rechargement). Sur tablette le menu reste en icônes ; sur mobile il s'ouvre en tiroir comme avant. Vérifié dans Chromium : 256 → 64 px, cookie, état conservé
+après rechargement, réouverture.
+
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
 Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de
