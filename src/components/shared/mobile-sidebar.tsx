@@ -11,7 +11,7 @@ import { NavList } from "@/components/shared/nav-list";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
-export function MobileSidebar({ organizationName, organizationLogoUrl }: { organizationName?: string; organizationLogoUrl?: string | null }) {
+export function MobileSidebar({ allowedHrefs, organizationName, organizationLogoUrl }: { allowedHrefs?: string[]; organizationName?: string; organizationLogoUrl?: string | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -31,7 +31,7 @@ export function MobileSidebar({ organizationName, organizationLogoUrl }: { organ
           )}
         </div>
         <div className="flex-1 overflow-y-auto">
-          <NavList onNavigate={() => setOpen(false)} />
+          <NavList allowedHrefs={allowedHrefs} onNavigate={() => setOpen(false)} />
         </div>
         <div className="border-t border-white/10 p-3">
           <Link

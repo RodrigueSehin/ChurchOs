@@ -380,6 +380,17 @@ mode « mouvement réduit ».
 Correction au passage : la palette `blue` de Tailwind était entièrement remplacée par la teinte de marque, donc `bg-blue-100`, `text-blue-600`… n'existaient pas
 (pastilles et icônes bleues sans couleur dans toute l'application) ; la palette standard est rétablie, `bg-blue` gardant la teinte de marque.
 
+### Menu filtré par permissions et changement de rôle
+
+- **Menu** : chaque entrée de `src/lib/navigation.ts` porte la permission que vérifie sa page (`permission`) ; le layout résout les permissions du membre
+  (`getAllowedNavHrefs`) et le menu (bureau, mobile, menu du compte) n'affiche que les modules autorisés ; une section sans entrée disparaît avec son titre.
+  Tableau de bord, ChurchOS AI, Profil et Notifications restent visibles par tous (l'IA filtre elle-même ses outils par permission) ; les pages restent protégées côté
+  serveur. Exemples : un `MEMBER` voit 14 entrées, un `FINANCE_MANAGER` 14, un administrateur 40. Les permissions étant lues à chaque requête, un changement de rôle
+  agit dès le prochain chargement de page. Limite : le Tableau de bord vérifie `members.view` ; un rôle sans cette permission voit « accès refusé » sur cette page.
+- **Changer le rôle d'un utilisateur** (Paramètres > Utilisateurs, liste déroulante « Rôle » de la ligne) : `updateMemberRole` vérifie que le membre et le rôle sont de
+  l'église, interdit de modifier son propre rôle, réserve l'attribution / le retrait d'un rôle d'administrateur aux administrateurs, empêche de rétrograder le dernier
+  administrateur, et ajoute le nouveau rôle avant de retirer les anciens (jamais de membre sans rôle). Confirmation « Rôle mis à jour » affichée sous la liste.
+
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
 Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de

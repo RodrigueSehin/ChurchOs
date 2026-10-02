@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MoreVertical, User } from "lucide-react";
+import { Check, MoreVertical, User } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -108,17 +108,23 @@ function MemberRow({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const name = member.displayName || [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email || "—";
   const currentRoleId = member.roles[0]?.id ?? "";
   const status = STATUS_BADGE[member.status] ?? { label: member.status, variant: "secondary" as const };
 
   function handleRoleChange(roleId: string) {
     setError(null);
+    setSaved(false);
     const role = roles.find((r) => r.id === roleId);
     startTransition(async () => {
       const res = await updateMemberRole(member.membershipId, roleId);
       if (res.error) setError(res.error);
-      else if (role) onPatch({ roles: [{ id: role.id, code: role.code, name: role.name }] });
+      else if (role) {
+        onPatch({ roles: [{ id: role.id, code: role.code, name: role.name }] });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
     });
   }
 
@@ -154,6 +160,8 @@ function MemberRow({
           disabled={isPending || isSelf}
           onChange={(e) => handleRoleChange(e.target.value)}
           className="h-9 text-xs"
+          aria-label={`Rôle de ${name}`}
+          title={isSelf ? "Vous ne pouvez pas modifier votre propre rôle" : "Changer le rôle"}
         >
           {!currentRoleId && <option value="">Aucun rôle</option>}
           {roles.map((r) => (
@@ -162,6 +170,12 @@ function MemberRow({
             </option>
           ))}
         </FormSelect>
+        {saved && (
+          <p role="status" className="mt-1 flex items-center gap-1 text-xs text-success">
+            <Check className="size-3" />
+            Rôle mis à jour
+          </p>
+        )}
       </td>
       <td className="px-3 py-3">
         <Badge variant={status.variant}>{status.label}</Badge>
