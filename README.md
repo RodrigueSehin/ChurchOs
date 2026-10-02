@@ -69,7 +69,19 @@ Détail complet par phase : [`docs/architecture/07-sprint-plan.md`](docs/archite
 
 Terminée : tableau de bord, menu latéral, Membres, Familles, Visiteurs, Groupes, Suivi pastoral,
 Sujets de prière, Visites, Conseil pastoral, Ministères, Ouvriers, Services, Calendrier, Plannings,
-Événements, Inscriptions, Présences, et la page Vitrine (site marketing public).
+Événements, Inscriptions, Présences, Statistiques (`/analytics`), et la page Vitrine (site marketing public).
+
+### Statistiques (`/analytics`)
+
+Page refaite selon la maquette : 12 cartes KPI, évolution des présences par catégorie, tranches
+d'âge, répartition par groupe, activités par catégorie d'événement, dons (réservés à `finance.view`),
+occupation des salles, top 5 des événements, nouveaux membres, statut des réservations et
+engagement/communication. Sélecteur de période dans l'URL (`?period=12m|6m|ytd`) ; les variations
+comparent à la période précédente de même durée (effectifs : depuis le début de la période,
+approximation par date d'adhésion — le statut n'est pas historisé). Requêtes dans
+`features/analytics/queries/statistics.ts`, vérifiées sur un Postgres 16 local avec des données de test ;
+non testée sur les données réelles Supabase. Choix assumés : sans date de naissance, une présence est
+comptée parmi les « Adultes » ; l'occupation d'une salle = jours avec réservation confirmée ÷ jours écoulés.
 
 ### Administration globale ChurchOS (`/platform`)
 
@@ -433,7 +445,7 @@ Migrations plus anciennes (mai–sept.) : `db/migrations/*.sql` par ordre de dat
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
 - **Tout ce qui est décrit comme « vérifié par typecheck/lint/build uniquement » ci-dessus** (Training, Certifications, Bibliothèque, Annonces, publication Facebook/Instagram, versets du jour) est à tester en conditions réelles ; la publication Meta n'a jamais été essayée avec de vrais jetons.
-- Refonte selon les maquettes des modules restants : Documents, Analytics, Reports,
+- Refonte selon les maquettes des modules restants : Documents, Reports,
   Settings, AI, Teams. 
 - Finir la vérification live des Phases 14 et 15, puis les marquer ✅.
 - Reporté volontairement : paiements mobiles (Orange Money, MTN, Wave), RAG/pgvector, streaming des
