@@ -355,6 +355,31 @@ le nombre ajouté ce mois, réservations ce mois avec variation %, taux d'occupa
 
 Vérifié par typecheck/lint/build uniquement — rendu à contrôler en conditions réelles.
 
+### Création d'un utilisateur par un administrateur (Paramètres > Utilisateurs)
+
+« Créer un utilisateur » (prénom, nom, email, rôle, fonction) remplace l'ancienne invitation par email. `POST /api/organizations/members/create` (permission
+`settings.manage`, client admin Supabase côté serveur uniquement) **génère un mot de passe aléatoire** (14 caractères, CSPRNG, conforme à la politique :
+majuscule, minuscule, chiffre, caractère spécial ; caractères ambigus 0/O/1/l/I exclus — `src/lib/auth/password.ts`), crée le compte (email confirmé) et le
+rattache à l'église avec son rôle. L'administrateur voit **une seule fois** l'identifiant et le mot de passe (boutons Copier) ; ils sont aussi envoyés par
+email à l'utilisateur si `RESEND_API_KEY` est configurée. Le mot de passe n'est jamais stocké en clair. À sa première connexion (`/login` → son église),
+l'utilisateur est redirigé vers `/reset-password/update` et doit choisir un nouveau mot de passe (drapeau `user_metadata.must_change_password`, levé par
+`updatePassword`). Si l'email a déjà un compte ChurchOS (autre église), il est simplement rattaché à cette église sans toucher à son mot de passe. En cas
+d'échec du rattachement, le compte tout juste créé est supprimé. Pas de migration. Vérifié par typecheck/lint/build uniquement — jamais essayé contre un vrai
+projet Supabase. Non fait : bouton « Réinitialiser le mot de passe » d'un utilisateur existant (l'utilisateur peut passer par « Mot de passe oublié »).
+
+### Page Vitrine animée (`/`)
+
+Animations en CSS pur + un petit composant `Reveal` (IntersectionObserver), sans dépendance : entrée échelonnée du hero (badge, titre au mot « ChurchOS » en dégradé
+animé, texte, boutons), halos lumineux flottants, image de l'église en lent zoom avec trois cartes d'interface qui flottent, apparition au défilement des modules,
+fonctionnalités (qui arrivent de la gauche), aperçu du tableau de bord (de la droite, avec l'aperçu mobile flottant), cartes « pourquoi », tarifs (le prix
+se ré-anime au changement mensuel / annuel), témoignages (étoiles animées au survol) ; FAQ à ouverture animée ; bannière finale avec reflet et bouton pulsant ;
+barre de navigation qui prend de l'ombre au défilement, soulignement animé des liens, menu mobile qui glisse ; défilement doux vers les ancres.
+`prefers-reduced-motion` désactive toutes les animations, et sans JavaScript tout reste visible (`<noscript>`). Les keyframes sont dans `tailwind.config.ts`,
+les classes `.reveal` dans `globals.css`. Vérifié dans Chromium (Playwright) : entrée du hero, révélation de toutes les sections au défilement, ombre de la barre,
+mode « mouvement réduit ».
+Correction au passage : la palette `blue` de Tailwind était entièrement remplacée par la teinte de marque, donc `bg-blue-100`, `text-blue-600`… n'existaient pas
+(pastilles et icônes bleues sans couleur dans toute l'application) ; la palette standard est rétablie, `bg-blue` gardant la teinte de marque.
+
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
 Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de

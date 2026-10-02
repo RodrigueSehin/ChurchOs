@@ -3,6 +3,8 @@ import { Footer } from "@/components/shared/footer";
 import { Sidebar } from "@/components/shared/sidebar";
 import { Topbar } from "@/components/shared/topbar";
 import { isPlatformAdmin } from "@/lib/auth/platform";
+import { redirect } from "next/navigation";
+
 import { requireOrganization, requireUser } from "@/lib/auth/session";
 
 function initialsOf(name: string) {
@@ -15,6 +17,8 @@ function initialsOf(name: string) {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  // Mot de passe temporaire généré par l'administrateur : à remplacer avant d'utiliser l'application.
+  if (user.mustChangePassword) redirect("/reset-password/update");
   const current = await requireOrganization(user.id);
   const platformAdmin = await isPlatformAdmin(user.id);
 

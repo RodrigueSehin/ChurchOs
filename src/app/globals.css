@@ -11,3 +11,62 @@
     @apply bg-primary/20;
   }
 }
+
+/* ---- Vitrine : défilement doux, apparition au scroll, accessibilité ---- */
+@layer base {
+  html {
+    scroll-padding-top: 5rem;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+}
+
+@layer components {
+  /* Éléments révélés au défilement (voir `Reveal`) : cachés tant qu'ils ne sont pas visibles. */
+  .reveal {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+    transition:
+      opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+  .reveal[data-dir="left"] {
+    transform: translate3d(-40px, 0, 0);
+  }
+  .reveal[data-dir="right"] {
+    transform: translate3d(40px, 0, 0);
+  }
+  .reveal[data-dir="scale"] {
+    transform: scale(0.92);
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  .text-gradient-animated {
+    background-image: linear-gradient(90deg, #f59e0b, #fbbf24, #ea580c, #f59e0b);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal[data-dir] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  [class*="animate-"] {
+    animation: none !important;
+  }
+}
