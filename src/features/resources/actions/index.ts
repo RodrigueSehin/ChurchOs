@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, ne, sql } from "drizzle-orm";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { canOnResource } from "@/features/resources/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/client";
 import { people, resourceReservations, resources } from "@/lib/db/schema";
@@ -65,7 +66,7 @@ export async function saveRoom(input: {
   newPhotos?: UploadedFileRef[];
   removedPhotos?: string[];
 }): Promise<ResourceActionState & { id?: string }> {
-  const check = await checkPermission("resources.manage");
+  const check = await checkPermission("rooms.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de gérer les salles." };
   const organizationId = check.organization.organization.id;
   const supabase = await createClient();
@@ -136,7 +137,7 @@ export async function saveEquipment(input: {
   newDocuments?: (UploadedFileRef & { name: string })[];
   removedDocuments?: string[];
 }): Promise<ResourceActionState & { id?: string }> {
-  const check = await checkPermission("resources.manage");
+  const check = await checkPermission("equipment.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de gérer les équipements." };
   const organizationId = check.organization.organization.id;
   const supabase = await createClient();
@@ -233,7 +234,7 @@ export async function saveEquipment(input: {
 
 /** Lien temporaire (1 h) vers un document d'équipement (bucket privé). */
 export async function getResourceDocumentUrl(resourceId: string, path: string): Promise<{ url?: string; error?: string }> {
-  const check = await checkPermission("resources.view");
+  const check = await checkPermission("equipment.view");
   if (!check.allowed) return { error: "Permission refusée." };
   const [row] = await db.select({ documents: resources.documents }).from(resources).where(and(eq(resources.id, resourceId), eq(resources.organizationId, check.organization.organization.id)));
   if (!row?.documents.some((d) => d.path === path)) return { error: "Document introuvable." };
@@ -245,8 +246,9 @@ export async function getResourceDocumentUrl(resourceId: string, path: string): 
 
 /** Réservé aux admins (policy RLS de suppression : `is_org_admin()`). Les réservations sont supprimées en cascade ; photos et documents sont retirés de Storage. */
 export async function deleteResource(resourceId: string): Promise<ResourceActionState> {
-  const check = await checkPermission("resources.manage");
-  if (!check.allowed || !check.context.isAdmin) {
+  // Le contrôle ci-dessous porte sur le type de la ressource ; ce premier appel ne sert qu'à résoudre le contexte du membre.
+  const check = await checkPermission("rooms.manage");
+  if (!check.context.isAdmin) {
     return { error: "Seul un administrateur de l'organisation peut supprimer une ressource." };
   }
 
@@ -269,8 +271,7 @@ export async function createReservation(
   _prev: ResourceActionState,
   formData: FormData,
 ): Promise<ResourceActionState> {
-  const check = await checkPermission("resources.reserve");
-  if (!check.allowed) return { error: "Vous n'avez pas la permission de réserver une ressource." };
+  const check = await checkPermission("rooms.reserve"); // contexte du membre ; le droit exact dépend du type (voir plus bas)
 
   const parsed = reservationSchema.safeParse({
     startsAt: formData.get("startsAt"),
@@ -290,12 +291,15 @@ export async function createReservation(
     .from(resources)
     .where(and(eq(resources.id, resourceId), eq(resources.organizationId, organizationId)));
   if (!resource) return { error: "Ressource introuvable." };
+  if (!canOnResource(check.context, resource.type, "reserve")) {
+    return { error: `Vous n'avez pas la permission de réserver ${resource.type === "room" ? "une salle" : "un équipement"}.` };
+  }
   if (resource.status === "draft") return { error: "Cette ressource n'est pas encore en service (brouillon)." };
   if (resource.status === "maintenance") return { error: "Cette ressource est actuellement en maintenance." };
   if (resource.status === "retired") return { error: "Cette ressource a été retirée du service." };
 
   if (!resource.allowReservations) return { error: "Les réservations sont désactivées pour cette ressource." };
-  const isManager = check.context.isAdmin || check.context.permissions.has("resources.manage");
+  const isManager = canOnResource(check.context, resource.type, "manage");
   if (resource.reservableBy === "admins" && !check.context.isAdmin) return { error: "Cette ressource n'est réservable que par les administrateurs." };
   if (resource.reservableBy === "leaders" && !isManager) return { error: "Cette ressource n'est réservable que par les responsables." };
 
@@ -337,20 +341,24 @@ export async function createReservation(
   return { success: true };
 }
 
-/** Le changement de statut est autorisé au gestionnaire (`resources.manage`/admin) ou au
+/** Le changement de statut est autorisé au gestionnaire (`rooms.manage` / `equipment.manage` / admin) ou au
  * demandeur lui-même sur sa propre réservation (ex. l'annuler) — jamais sur celle d'un tiers. */
 export async function updateReservationStatus(reservationId: string, status: string): Promise<ResourceActionState> {
-  const check = await checkPermission("resources.reserve");
-  if (!check.allowed) return { error: "Vous n'avez pas la permission de modifier cette réservation." };
+  const check = await checkPermission("rooms.reserve"); // contexte du membre ; le droit exact dépend du type (voir plus bas)
 
   const organizationId = check.organization.organization.id;
   const [reservation] = await db
-    .select()
+    .select({ reservation: resourceReservations, resourceType: resources.type })
     .from(resourceReservations)
-    .where(and(eq(resourceReservations.id, reservationId), eq(resourceReservations.organizationId, organizationId)));
+    .innerJoin(resources, eq(resources.id, resourceReservations.resourceId))
+    .where(and(eq(resourceReservations.id, reservationId), eq(resourceReservations.organizationId, organizationId)))
+    .then((rows) => rows.map((r) => ({ ...r.reservation, resourceType: r.resourceType })));
   if (!reservation) return { error: "Réservation introuvable." };
+  if (!canOnResource(check.context, reservation.resourceType, "reserve")) {
+    return { error: "Vous n'avez pas la permission de modifier cette réservation." };
+  }
 
-  const canManageAny = check.context.isAdmin || check.context.permissions.has("resources.manage");
+  const canManageAny = canOnResource(check.context, reservation.resourceType, "manage");
   const isOwner = reservation.reservedByUserId === check.user.id;
   if (!canManageAny && !isOwner) {
     return { error: "Vous ne pouvez modifier que vos propres réservations." };

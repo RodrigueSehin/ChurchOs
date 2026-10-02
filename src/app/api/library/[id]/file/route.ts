@@ -15,11 +15,11 @@ import { LIBRARY_BUCKET, PDF_MIME } from "@/features/library/schemas";
  * signée courte — pas de mise en mémoire du fichier. Même règles de visibilité que la liste.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const check = await checkPermission("training.view");
+  const check = await checkPermission("library.view");
   if (!check.allowed) return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
 
   const { id } = await params;
-  const canManage = check.context.isAdmin || check.context.permissions.has("training.manage");
+  const canManage = check.context.isAdmin || check.context.permissions.has("library.manage");
   const resource = await getResourceForViewer(check.organization.organization.id, id, canManage);
   if (!resource) return NextResponse.json({ error: "Ressource introuvable." }, { status: 404 });
 

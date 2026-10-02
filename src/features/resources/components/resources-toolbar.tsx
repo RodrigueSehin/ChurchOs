@@ -20,10 +20,13 @@ export function ResourcesToolbar({
   tab,
   initialSearch,
   actions,
+  tabs,
 }: {
   tab: string;
   initialSearch: string;
   actions?: React.ReactNode;
+  /** Onglets proposés (selon les permissions) ; absent = tous. */
+  tabs?: string[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -53,10 +56,10 @@ export function ResourcesToolbar({
   return (
     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
       <div className="flex flex-wrap gap-2">
-        {TABS.map((t) => (
+        {TABS.filter((t) => !tabs || tabs.includes(t.value)).map((t) => (
           <Link
             key={t.value}
-            href={t.value === "rooms" ? "/resources" : `/resources?tab=${t.value}`}
+            href={`/resources?tab=${t.value}`}
             className={cn(
               "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
               tab === t.value

@@ -57,7 +57,7 @@ export default async function CommunicationPage({
   const tab = params.tab ?? "announcements";
   const organizationId = check.organization.organization.id;
   const canManage = check.context.isAdmin || check.context.permissions.has("communication.manage");
-  const canSend = check.context.isAdmin || check.context.permissions.has("communication.send");
+  const canSend = check.context.isAdmin || check.context.permissions.has("messages.send");
   const page = Math.max(1, Number(params.page) || 1);
 
   return (
@@ -89,7 +89,7 @@ export default async function CommunicationPage({
         />
       )}
       {tab === "templates" && <TemplatesTab organizationId={organizationId} canManage={canManage} isAdmin={check.context.isAdmin} />}
-      {tab === "compose" && (canSend ? <ComposeTab organizationId={organizationId} /> : <PermissionDenied requiredPermission="communication.send" />)}
+      {tab === "compose" && (canSend ? <ComposeTab organizationId={organizationId} /> : <PermissionDenied requiredPermission="messages.send" />)}
       {tab === "history" && <HistoryTab organizationId={organizationId} page={page} canSend={canSend} />}
     </div>
   );

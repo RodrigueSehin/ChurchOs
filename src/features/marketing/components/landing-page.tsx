@@ -15,6 +15,10 @@ type Plan = typeof plansTable.$inferSelect;
 export function LandingPage({ plans }: { plans: Plan[] }) {
   return (
     <div className="flex min-h-dvh flex-col bg-white">
+      {/* Sans JavaScript, les éléments « révélés au défilement » restent visibles. */}
+      <noscript>
+        <style>{".reveal{opacity:1!important;transform:none!important}"}</style>
+      </noscript>
       <MarketingNav />
       <main>
         <HeroSection />

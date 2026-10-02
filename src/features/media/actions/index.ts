@@ -30,7 +30,7 @@ const uploadedFileSchema = z.object({
 
 /** Enregistre des fichiers déjà envoyés DIRECTEMENT du navigateur vers Storage (une Server Action ne peut pas porter leur corps). */
 export async function registerMedia(input: { files: z.input<typeof uploadedFileSchema>[]; tags?: string[] }): Promise<MediaActionState> {
-  const check = await checkPermission("communication.manage");
+  const check = await checkPermission("media.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission d'ajouter des médias." };
   const organizationId = check.organization.organization.id;
   const supabase = await createClient();
@@ -78,7 +78,7 @@ export async function registerMedia(input: { files: z.input<typeof uploadedFileS
 }
 
 export async function updateMedia(input: { id: string; title: string; tags: string[] }): Promise<MediaActionState> {
-  const check = await checkPermission("communication.manage");
+  const check = await checkPermission("media.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de modifier ce média." };
   const title = input.title.trim();
   if (!title || title.length > 200) return { error: "Titre requis (200 caractères maximum)." };
@@ -93,7 +93,7 @@ export async function updateMedia(input: { id: string; title: string; tags: stri
 }
 
 export async function deleteMedia(id: string): Promise<MediaActionState> {
-  const check = await checkPermission("communication.manage");
+  const check = await checkPermission("media.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de supprimer ce média." };
   const [row] = await db
     .delete(mediaItems)
@@ -108,7 +108,7 @@ export async function deleteMedia(id: string): Promise<MediaActionState> {
 
 /** Relie la chaîne YouTube de l'église (administrateur) : ses vidéos alimentent l'onglet Vidéos. */
 export async function saveYoutubeChannel(input: string): Promise<MediaActionState & { title?: string }> {
-  const check = await checkPermission("communication.manage");
+  const check = await checkPermission("media.manage");
   if (!check.allowed || !check.context.isAdmin) return { error: "Seul un administrateur peut relier la chaîne YouTube." };
   try {
     const channel = await resolveChannel(input);
@@ -133,7 +133,7 @@ export async function saveYoutubeChannel(input: string): Promise<MediaActionStat
 }
 
 export async function removeYoutubeChannel(): Promise<MediaActionState> {
-  const check = await checkPermission("communication.manage");
+  const check = await checkPermission("media.manage");
   if (!check.allowed || !check.context.isAdmin) return { error: "Seul un administrateur peut déconnecter la chaîne YouTube." };
   await db.delete(mediaYoutubeChannels).where(eq(mediaYoutubeChannels.organizationId, check.organization.organization.id));
   revalidatePath(PATH);

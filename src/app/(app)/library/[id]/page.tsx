@@ -42,18 +42,18 @@ async function loadDocx(filePath: string, fileSize: number | null): Promise<Docx
 }
 
 export default async function LibraryResourcePage({ params }: { params: Promise<{ id: string }> }) {
-  const check = await checkPermission("training.view");
+  const check = await checkPermission("library.view");
   if (!check.allowed) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader title="Bibliothèque" />
-        <PermissionDenied requiredPermission="training.view" />
+        <PermissionDenied requiredPermission="library.view" />
       </div>
     );
   }
 
   const { id } = await params;
-  const canManage = check.context.isAdmin || check.context.permissions.has("training.manage");
+  const canManage = check.context.isAdmin || check.context.permissions.has("library.manage");
   const resource = await getResourceForViewer(check.organization.organization.id, id, canManage);
   if (!resource) notFound();
   // Modification réservée à l'administrateur / propriétaire de l'église.

@@ -87,20 +87,29 @@ function hoursWithin(r: { startsAt: Date; endsAt: Date }, from: number, to: numb
 }
 
 /** Données de la page « Salles & équipements » : salles enrichies, équipements, réservations et KPI. */
-export async function getResourcesOverview(organizationId: string, canManage: boolean) {
+export interface OverviewAccess {
+  rooms: { view: boolean; manage: boolean };
+  equipment: { view: boolean; manage: boolean };
+}
+
+export async function getResourcesOverview(organizationId: string, access: OverviewAccess) {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-  const [allRows, reservations] = await Promise.all([
+  const [allRows, allReservations] = await Promise.all([
     getResources(organizationId),
     // 60 jours en arrière (taux d'occupation, mois précédent) jusqu'à 1 an devant (réservations à venir).
     getReservationsBetween(organizationId, new Date(now.getTime() - 62 * DAY), new Date(now.getTime() + 365 * DAY)),
   ]);
 
-  // Les brouillons ne sont visibles que des gestionnaires et ne comptent dans aucun indicateur.
-  const all = canManage ? allRows : allRows.filter((r) => r.status !== "draft");
+  // Chaque type n'est visible que par qui en a la permission ; les brouillons, des seuls gestionnaires du type, et ils ne comptent
+  // dans aucun indicateur.
+  const visible = (type: string) => (type === "room" ? access.rooms.view : access.equipment.view);
+  const manages = (type: string) => (type === "room" ? access.rooms.manage : access.equipment.manage);
+  const all = allRows.filter((r) => visible(r.type) && (r.status !== "draft" || manages(r.type)));
+  const reservations = allReservations.filter((r) => visible(r.resourceType));
   const live = all.filter((r) => r.status !== "draft");
   const active = reservations.filter((r) => r.status !== "cancelled");
   const roomRows = all.filter((r) => r.type === "room");

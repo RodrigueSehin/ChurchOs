@@ -355,6 +355,55 @@ le nombre ajouté ce mois, réservations ce mois avec variation %, taux d'occupa
 
 Vérifié par typecheck/lint/build uniquement — rendu à contrôler en conditions réelles.
 
+### Création d'un utilisateur par un administrateur (Paramètres > Utilisateurs)
+
+« Créer un utilisateur » (prénom, nom, email, rôle, fonction) remplace l'ancienne invitation par email. `POST /api/organizations/members/create` (permission
+`settings.manage`, client admin Supabase côté serveur uniquement) **génère un mot de passe aléatoire** (14 caractères, CSPRNG, conforme à la politique :
+majuscule, minuscule, chiffre, caractère spécial ; caractères ambigus 0/O/1/l/I exclus — `src/lib/auth/password.ts`), crée le compte (email confirmé) et le
+rattache à l'église avec son rôle. L'administrateur voit **une seule fois** l'identifiant et le mot de passe (boutons Copier) ; ils sont aussi envoyés par
+email à l'utilisateur si `RESEND_API_KEY` est configurée. Le mot de passe n'est jamais stocké en clair. À sa première connexion (`/login` → son église),
+l'utilisateur est redirigé vers `/reset-password/update` et doit choisir un nouveau mot de passe (drapeau `user_metadata.must_change_password`, levé par
+`updatePassword`). Si l'email a déjà un compte ChurchOS (autre église), il est simplement rattaché à cette église sans toucher à son mot de passe. En cas
+d'échec du rattachement, le compte tout juste créé est supprimé. Pas de migration. Vérifié par typecheck/lint/build uniquement — jamais essayé contre un vrai
+projet Supabase. Non fait : bouton « Réinitialiser le mot de passe » d'un utilisateur existant (l'utilisateur peut passer par « Mot de passe oublié »).
+
+### Page Vitrine animée (`/`)
+
+Animations en CSS pur + un petit composant `Reveal` (IntersectionObserver), sans dépendance : entrée échelonnée du hero (badge, titre au mot « ChurchOS » en dégradé
+animé, texte, boutons), halos lumineux flottants, image de l'église en lent zoom avec trois cartes d'interface qui flottent, apparition au défilement des modules,
+fonctionnalités (qui arrivent de la gauche), aperçu du tableau de bord (de la droite, avec l'aperçu mobile flottant), cartes « pourquoi », tarifs (le prix
+se ré-anime au changement mensuel / annuel), témoignages (étoiles animées au survol) ; FAQ à ouverture animée ; bannière finale avec reflet et bouton pulsant ;
+barre de navigation qui prend de l'ombre au défilement, soulignement animé des liens, menu mobile qui glisse ; défilement doux vers les ancres.
+`prefers-reduced-motion` désactive toutes les animations, et sans JavaScript tout reste visible (`<noscript>`). Les keyframes sont dans `tailwind.config.ts`,
+les classes `.reveal` dans `globals.css`. Vérifié dans Chromium (Playwright) : entrée du hero, révélation de toutes les sections au défilement, ombre de la barre,
+mode « mouvement réduit ».
+Correction au passage : la palette `blue` de Tailwind était entièrement remplacée par la teinte de marque, donc `bg-blue-100`, `text-blue-600`… n'existaient pas
+(pastilles et icônes bleues sans couleur dans toute l'application) ; la palette standard est rétablie, `bg-blue` gardant la teinte de marque.
+
+### Menu filtré par permissions et changement de rôle
+
+- **Menu** : chaque entrée de `src/lib/navigation.ts` porte la permission que vérifie sa page (`permission`) ; le layout résout les permissions du membre
+  (`getAllowedNavHrefs`) et le menu (bureau, mobile, menu du compte) n'affiche que les modules autorisés ; une section sans entrée disparaît avec son titre.
+  Tableau de bord, ChurchOS AI, Profil et Notifications restent visibles par tous (l'IA filtre elle-même ses outils par permission) ; les pages restent protégées côté
+  serveur. Exemples : un `MEMBER` voit 14 entrées, un `FINANCE_MANAGER` 14, un administrateur 40. Les permissions étant lues à chaque requête, un changement de rôle
+  agit dès le prochain chargement de page. Limite : le Tableau de bord vérifie `members.view` ; un rôle sans cette permission voit « accès refusé » sur cette page.
+- **Changer le rôle d'un utilisateur** (Paramètres > Utilisateurs, liste déroulante « Rôle » de la ligne) : `updateMemberRole` vérifie que le membre et le rôle sont de
+  l'église, interdit de modifier son propre rôle, réserve l'attribution / le retrait d'un rôle d'administrateur aux administrateurs, empêche de rétrograder le dernier
+  administrateur, et ajoute le nouveau rôle avant de retirer les anciens (jamais de membre sans rôle). Confirmation « Rôle mis à jour » affichée sous la liste.
+
+### Permissions par module (Paramètres > Rôles)
+
+Le catalogue passe de 61 à 70 permissions : certifications, bibliothèque, messages SMS/Email, médias, salles et équipements ont désormais **leurs propres permissions**
+(avant, ils dépendaient de `training.*`, `communication.*` et `resources.*`) : `certifications.view`, `library.view` / `library.manage`, `messages.view` / `messages.send`,
+`media.view` / `media.manage`, `rooms.view` / `rooms.manage` / `rooms.reserve`, `equipment.view` / `equipment.manage` / `equipment.reserve`. Les pages, actions serveur, le menu
+et la matrice des rôles les utilisent ; la matrice affiche un libellé pour chaque module. Annonces : `communication.*` (sans `communication.send`, remplacée par `messages.send`) ;
+cours : `training.*`. Dans Salles & équipements, chaque onglet, KPI, bouton et réservation respecte le droit du type concerné (un rôle qui n'a que `equipment.*` ne voit
+pas les salles, et inversement ; les brouillons ne sont visibles que de qui gère le type).
+**Migration à appliquer** : [`db/migrations/2026-10-12-permissions-modules.sql`](db/migrations/2026-10-12-permissions-modules.sql) (idempotente, incluse dans `db/schema.sql` et
+`2026-10-all-migrations.sql`, testée deux fois sur Postgres 16) : ajoute les nouvelles permissions, **reprend les droits déjà accordés** (un rôle qui avait `training.view` reçoit `certifications.view`
+et `library.view`, `communication.view` → `messages.view` + `media.view`, `resources.*` → `rooms.*` + `equipment.*`, etc.) puis supprime `communication.send` et `resources.*`. À exécuter AVANT
+de déployer : sans elle, les rôles personnalisés perdent l'accès à ces modules (les administrateurs gardent tout) et la matrice n'affiche pas les nouvelles lignes.
+
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
 Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de
@@ -371,7 +420,7 @@ formulaire d'annonce (seuls Facebook, Instagram et le partage WhatsApp restent).
 
 | Quoi | Où | Pour |
 | --- | --- | --- |
-| `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces, médias, salles & équipements (3 au 11 oct.) |
+| `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces, médias, salles & équipements, permissions par module (3 au 12 oct.) |
 | `db/migrations/2026-10-07-library-pdf-docx.sql` | SQL Editor Supabase | Seulement si `2026-10-06-library.sql` avait été exécutée avant la restriction PDF/DOCX |
 | `SOCIAL_TOKEN_KEY` (`openssl rand -base64 32`) | Variables Vercel | Connecter Facebook / Instagram (Paramètres > Réseaux sociaux) |
 | `YOUTUBE_API_KEY` + migration `2026-10-10-media-library.sql` (+ `2026-10-11-resources-forms.sql` pour Salles & équipements) | Variables Vercel / SQL Editor | Page Médias (vidéos de la chaîne YouTube, téléversements) |

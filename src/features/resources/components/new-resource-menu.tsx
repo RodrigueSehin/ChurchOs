@@ -7,7 +7,19 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 /** Bouton bleu « Nouvelle salle » avec menu : Nouvelle salle / Nouvel équipement (pages de formulaire dédiées). */
-export function NewResourceMenu() {
+export function NewResourceMenu({ canRoom, canEquipment }: { canRoom: boolean; canEquipment: boolean }) {
+  // Une seule possibilité : un simple bouton, sans menu.
+  if (canRoom !== canEquipment) {
+    const room = canRoom;
+    return (
+      <Button asChild>
+        <Link href={room ? "/resources/new-room" : "/resources/new-equipment"}>
+          <Plus className="size-4" />
+          {room ? "Nouvelle salle" : "Nouvel équipement"}
+        </Link>
+      </Button>
+    );
+  }
   return (
     <div className="flex">
       <Button asChild className="rounded-r-none">

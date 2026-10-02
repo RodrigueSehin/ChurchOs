@@ -9,12 +9,12 @@ import { probeResourceColumns } from "@/features/resources/queries/form";
 import { RoomForm } from "@/features/resources/components/room-form";
 
 export default async function NewRoomPage() {
-  const check = await checkPermission("resources.manage");
+  const check = await checkPermission("rooms.manage");
   if (!check.allowed) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader title="Nouvelle salle" />
-        <PermissionDenied requiredPermission="resources.manage" />
+        <PermissionDenied requiredPermission="rooms.manage" />
       </div>
     );
   }

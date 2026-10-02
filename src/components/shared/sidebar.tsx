@@ -9,10 +9,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function Sidebar({
+  allowedHrefs,
   isPlatformAdmin = false,
   organizationName,
   organizationLogoUrl,
 }: {
+  allowedHrefs?: string[];
   isPlatformAdmin?: boolean;
   organizationName?: string;
   /** Logo de l'église : s'il existe, il remplace celui de ChurchOS dans le menu. */
@@ -36,10 +38,10 @@ export function Sidebar({
 
         <ScrollArea className="flex-1">
           <div className="lg:hidden">
-            <NavList iconOnly />
+            <NavList allowedHrefs={allowedHrefs} iconOnly />
           </div>
           <div className="hidden lg:block">
-            <NavList />
+            <NavList allowedHrefs={allowedHrefs} />
           </div>
         </ScrollArea>
 

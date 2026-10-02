@@ -11,6 +11,8 @@ export interface CurrentUser {
   id: string;
   email: string;
   profile: typeof profiles.$inferSelect | null;
+  /** Compte créé par un administrateur avec un mot de passe temporaire : le changement est obligatoire. */
+  mustChangePassword: boolean;
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -21,7 +23,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   if (!user) return null;
 
   const [profile] = await db.select().from(profiles).where(eq(profiles.id, user.id));
-  return { id: user.id, email: user.email ?? "", profile: profile ?? null };
+  return {
+    id: user.id,
+    email: user.email ?? "",
+    profile: profile ?? null,
+    mustChangePassword: user.user_metadata?.must_change_password === true,
+  };
 }
 
 /** Redirige vers /login si pas de session — le middleware le fait déjà pour les pages,

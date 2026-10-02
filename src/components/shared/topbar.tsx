@@ -19,6 +19,8 @@ import {
 import { settingsNav } from "@/lib/navigation";
 
 interface TopbarProps {
+  /** Entrées de menu autorisées (voir `getAllowedNavHrefs`). */
+  allowedHrefs?: string[];
   organizationName: string;
   organizationCity?: string | null;
   organizationLogoUrl?: string | null;
@@ -28,10 +30,10 @@ interface TopbarProps {
   userAvatarUrl?: string | null;
 }
 
-export function Topbar({ organizationName, organizationCity, organizationLogoUrl, userName, userRole, userInitials, userAvatarUrl }: TopbarProps) {
+export function Topbar({ allowedHrefs, organizationName, organizationCity, organizationLogoUrl, userName, userRole, userInitials, userAvatarUrl }: TopbarProps) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:gap-4 sm:px-6">
-      <MobileSidebar organizationName={organizationName} organizationLogoUrl={organizationLogoUrl} />
+      <MobileSidebar allowedHrefs={allowedHrefs} organizationName={organizationName} organizationLogoUrl={organizationLogoUrl} />
 
       <div className="relative hidden max-w-md flex-1 md:block">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -89,7 +91,7 @@ export function Topbar({ organizationName, organizationCity, organizationLogoUrl
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Mon compte</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {settingsNav.map((item) => (
+            {settingsNav.filter((item) => !allowedHrefs || allowedHrefs.includes(item.href)).map((item) => (
               <DropdownMenuItem key={item.href} asChild>
                 <Link href={item.href}>
                   <item.icon className="size-4" />
