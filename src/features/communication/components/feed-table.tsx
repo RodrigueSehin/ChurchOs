@@ -3,14 +3,14 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, Mail, MessageSquare, Megaphone, MoreVertical, Pencil, Trash2, Users } from "lucide-react";
+import { Eye, Mail, MessageCircle, MessageSquare, Megaphone, MoreVertical, Pencil, Trash2, Users } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RichText } from "@/components/shared/rich-text";
 import { deleteAnnouncement, markAnnouncementRead } from "@/features/communication/actions";
 import type { FeedItem } from "@/features/communication/queries";
-import { ANNOUNCEMENT_STATUS_LABELS } from "@/features/communication/schemas";
+import { ANNOUNCEMENT_STATUS_LABELS, markdownToPlain } from "@/features/communication/schemas";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -73,6 +73,9 @@ function FeedRow({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const { d, t } = formatDate(item.date);
+  const whatsappUrl = item.announcement
+    ? `https://wa.me/?text=${encodeURIComponent(`${item.title}\n\n${markdownToPlain(item.announcement.content ?? "")}`)}`
+    : null;
   const isAnnouncement = item.kind === "announcement";
   const ChannelIcon = item.channel === "email" ? Mail : MessageSquare;
 
@@ -161,6 +164,12 @@ function FeedRow({
                   <Eye className="size-4" />
                   Lire
                 </button>
+                {whatsappUrl && (
+                  <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
+                    <MessageCircle className="size-4 text-success" />
+                    WhatsApp
+                  </a>
+                )}
                 {canManage && item.announcement && (
                   <Link href={`/communication/${item.id}/edit`} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-navy hover:bg-slate-50">
                     <Pencil className="size-4" />
@@ -201,6 +210,12 @@ function FeedRow({
                 <img src={item.imageUrl} alt="" className="mb-3 max-h-64 w-full rounded-lg object-cover" />
               )}
               <RichText text={item.announcement?.content ?? ""} className="space-y-1 text-sm text-slate-700" />
+              {whatsappUrl && (
+                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="mt-3 mr-4 inline-flex items-center gap-1.5 text-sm text-primary underline">
+                  <MessageCircle className="size-4 text-success" />
+                  Partager sur WhatsApp
+                </a>
+              )}
               {item.announcement?.attachmentUrl && (
                 <a href={item.announcement.attachmentUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-sm text-primary underline">
                   {item.announcement.attachmentName ?? "Pièce jointe"}
