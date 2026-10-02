@@ -224,6 +224,15 @@ export const VERSE_POOLS = {
     v("Un cœur intelligent acquiert la science, et l'oreille des sages cherche la science.", "Proverbes 18:15"),
     v("Ils examinaient chaque jour les Écritures, pour voir si ce qu'on leur disait était exact.", "Actes 17:11"),
   ],
+  resources: [
+    v("Que tout se fasse avec bienséance et avec ordre.", "1 Corinthiens 14:40"),
+    v("Par la sagesse une maison s'élève, et par l'intelligence elle s'affermit.", "Proverbes 24:3"),
+    v("Ma maison sera appelée une maison de prière pour tous les peuples.", "Ésaïe 56:7"),
+    v("Je me suis réjoui quand on m'a dit : Allons à la maison de l'Éternel !", "Psaume 122:1"),
+    v("Vous-mêmes, comme des pierres vivantes, édifiez-vous pour former une maison spirituelle.", "1 Pierre 2:5"),
+    v("Exercez l'hospitalité les uns envers les autres, sans murmures.", "1 Pierre 4:9"),
+    v("Que tout ce que vous faites se fasse avec charité.", "1 Corinthiens 16:14"),
+  ],
   auth: [
     v("Celui qui a fait la promesse est fidèle.", "Hébreux 10:23"),
     v("Que l'Éternel te bénisse, et qu'il te garde !", "Nombres 6:24"),

@@ -1,9 +1,12 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
+  date,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -71,12 +74,37 @@ export const resources = pgTable(
     location: text("location"),
     status: text("status").notNull().default("available"),
     metadata: jsonb("metadata").notNull().default({}),
+    // Salle
+    capacity: integer("capacity"),
+    roomType: text("room_type"),
+    amenities: text("amenities").array().notNull().default(sql`'{}'`),
+    reservableBy: text("reservable_by").notNull().default("members"),
+    allowReservations: boolean("allow_reservations").notNull().default(true),
+    requiresApproval: boolean("requires_approval").notNull().default(true),
+    publicCalendar: boolean("public_calendar").notNull().default(false),
+    internalNotes: text("internal_notes"),
+    // Équipement
+    category: text("category"),
+    brand: text("brand"),
+    model: text("model"),
+    serialNumber: text("serial_number"),
+    condition: text("condition"),
+    purchaseDate: date("purchase_date"),
+    purchaseValue: numeric("purchase_value", { precision: 14, scale: 0, mode: "number" }),
+    roomId: uuid("room_id").references((): AnyPgColumn => resources.id, { onDelete: "set null" }),
+    responsiblePersonId: uuid("responsible_person_id").references(() => people.id, { onDelete: "set null" }),
+    warrantyEnd: date("warranty_end"),
+    supplier: text("supplier"),
+    invoiceReference: text("invoice_reference"),
+    // Communs
+    photos: text("photos").array().notNull().default(sql`'{}'`),
+    documents: jsonb("documents").$type<{ path: string; name: string; mime: string; size: number }[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check("resources_quantity_check", sql`${table.quantity} > 0`),
-    check("resources_status_check", sql`${table.status} in ('available','maintenance','retired')`),
+    check("resources_status_check", sql`${table.status} in ('available','maintenance','retired','draft')`),
   ],
 );
 

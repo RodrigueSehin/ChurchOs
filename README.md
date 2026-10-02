@@ -323,6 +323,38 @@ suppression, informations, tags modifiables, titre modifiable).
 
 Vérifié par typecheck/lint/build uniquement — jamais essayé avec une vraie clé YouTube ni un vrai bucket.
 
+### Salles & équipements (`/resources`)
+
+Refonte d'après la maquette : bannière (1 Corinthiens 14:40, contexte de verset `resources`), 4 KPI (salles et équipements avec
+le nombre ajouté ce mois, réservations ce mois avec variation %, taux d'occupation avec variation en points), onglets
+**Salles / Équipements / Réservations / Calendrier** (+ recherche dans l'URL), bouton bleu à menu **Nouvelle salle / Nouvel équipement**.
+
+- **Salles** : tableau paginé (nom, capacité, type en pastille, localisation, statut, icônes d'équipements +N, menu Réserver / Modifier / Supprimer)
+  et panneau de détail de la salle sélectionnée (photo ou visuel par défaut avec carrousel si `metadata.photos`, capacité, localisation,
+  type, description, équipements affectés avec « Voir tout (n) », 3 prochaines réservations avec statut, boutons Modifier / Réserver cette salle).
+  Statut affiché « Réservée » quand une réservation active (en attente / confirmée) couvre l'instant présent, « En maintenance » si la salle l'est.
+- **Équipements** (équipements, véhicules et autres) : catégorie, quantité, salle d'affectation, statut ; filtrable par salle (`?room=`).
+- **Réservations** : toutes les réservations (60 jours passés à 1 an à venir), statut modifiable par le gestionnaire ou le demandeur (règles inchangées).
+- **Calendrier** : vue mensuelle (`?month=YYYY-MM`) des réservations non annulées.
+- **Taux d'occupation** = heures réservées des salles sur 30 jours ÷ (salles disponibles × 30 j × 12 h d'ouverture, 8 h – 20 h), comparé aux 30 jours précédents.
+- **Formulaires pleine page** (menu du bouton bleu) : `/resources/new-room` (4 sections : infos générales ; disponibilité et paramètres — statut, réservable par,
+  autoriser les réservations, validation requise, calendrier public ; équipements cochables ; photos) et `/resources/new-equipment` (5 sections : infos ; détails —
+  marque, modèle, n° de série, état, date et valeur d'achat ; affectation — salle et responsable ; garantie, fournisseur, référence facture ; photo et documents),
+  chacun avec **aperçu en direct** à droite, « Enregistrer en brouillon » (statut `draft`, visible des seuls gestionnaires, hors indicateurs, non réservable) et
+  « Créer ». Modification : `/resources/[id]/edit` (même formulaire). Le fil d'Ariane affiche le groupe du menu (« Ressources › Salles & équipements › Nouvelle salle »).
+- **Migration à appliquer** : [`db/migrations/2026-10-11-resources-forms.sql`](db/migrations/2026-10-11-resources-forms.sql) (idempotente, incluse dans `db/schema.sql` et
+  `2026-10-all-migrations.sql` ; testée deux fois sur Postgres 16) : colonnes de `resources` (capacité, type de salle, équipements, réservable par, options de réservation,
+  notes, catégorie, marque, modèle, série, état, achat, salle d'affectation, responsable, garantie, fournisseur, facture, photos, documents), statut `draft`, et deux buckets :
+  `churchos-resources` (photos, public, 5 Mo) et `churchos-resource-docs` (documents PDF/JPG/PNG, privé, URL signée, 5 Mo). Les valeurs déjà rangées dans `metadata`
+  (capacité, type, catégorie, salle) sont reprises. Sans la migration, les pages affichent « Mise à jour de la base de données requise ».
+- Les réservations respectent désormais les réglages de la salle : désactivées si « Autoriser les réservations » est coupé, « Réservable par » (membres / responsables / administrateurs),
+  et « Validation requise » (réservation « En attente » ; sinon « Confirmée » d'emblée). Les ressources existantes gardent la validation requise.
+- Écarts avec la maquette : champ **Quantité** ajouté au formulaire d'équipement (sans lui, impossible de saisir « 200 chaises »), liste « Équipements » du panneau de salle =
+  cases cochées + catégories des équipements installés, pas de bouton « Filtres », pas d'actions groupées, pas de sélecteur de taille de page, pas de photo recommandée imposée
+  (indication seulement). Les documents d'équipement ne se téléchargent que depuis le formulaire de modification.
+
+Vérifié par typecheck/lint/build uniquement — rendu à contrôler en conditions réelles.
+
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
 Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de
@@ -339,10 +371,10 @@ formulaire d'annonce (seuls Facebook, Instagram et le partage WhatsApp restent).
 
 | Quoi | Où | Pour |
 | --- | --- | --- |
-| `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces, médias (3 au 10 oct.) |
+| `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces, médias, salles & équipements (3 au 11 oct.) |
 | `db/migrations/2026-10-07-library-pdf-docx.sql` | SQL Editor Supabase | Seulement si `2026-10-06-library.sql` avait été exécutée avant la restriction PDF/DOCX |
 | `SOCIAL_TOKEN_KEY` (`openssl rand -base64 32`) | Variables Vercel | Connecter Facebook / Instagram (Paramètres > Réseaux sociaux) |
-| `YOUTUBE_API_KEY` + migration `2026-10-10-media-library.sql` | Variables Vercel / SQL Editor | Page Médias (vidéos de la chaîne YouTube, téléversements) |
+| `YOUTUBE_API_KEY` + migration `2026-10-10-media-library.sql` (+ `2026-10-11-resources-forms.sql` pour Salles & équipements) | Variables Vercel / SQL Editor | Page Médias (vidéos de la chaîne YouTube, téléversements) |
 | `TWILIO_*`, `CRON_SECRET` + appel périodique de `/api/cron/send-messages` | Variables Vercel / planificateur | Envoi de SMS et messages planifiés |
 
 Migrations plus anciennes (mai–sept.) : `db/migrations/*.sql` par ordre de date, toutes incluses dans
@@ -352,7 +384,7 @@ Migrations plus anciennes (mai–sept.) : `db/migrations/*.sql` par ordre de dat
 
 - **Page de l'utilisateur connecté (`/settings/profile`)** : écrite (infos personnelles, préférences, changement de mot de passe avec réauthentification), vérifiée par typecheck/lint uniquement — à tester en conditions réelles.
 - **Tout ce qui est décrit comme « vérifié par typecheck/lint/build uniquement » ci-dessus** (Training, Certifications, Bibliothèque, Annonces, publication Facebook/Instagram, versets du jour) est à tester en conditions réelles ; la publication Meta n'a jamais été essayée avec de vrais jetons.
-- Refonte selon les maquettes des modules restants : Documents, Resources, Analytics, Reports,
+- Refonte selon les maquettes des modules restants : Documents, Analytics, Reports,
   Settings, AI, Teams. 
 - Finir la vérification live des Phases 14 et 15, puis les marquer ✅.
 - Reporté volontairement : paiements mobiles (Orange Money, MTN, Wave), RAG/pgvector, streaming des
