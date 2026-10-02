@@ -38,7 +38,7 @@ export async function registerResource(input: {
   coverMime?: string;
   coverSize?: number;
 }): Promise<LibraryActionState> {
-  const check = await checkPermission("training.manage");
+  const check = await checkPermission("library.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission d'ajouter une ressource." };
 
   const organizationId = check.organization.organization.id;
@@ -152,7 +152,7 @@ export async function updateResource(input: {
   coverSize?: number;
   removeCover?: boolean;
 }): Promise<LibraryActionState> {
-  const check = await checkPermission("training.manage");
+  const check = await checkPermission("library.manage");
   if (!check.allowed || !check.context.isAdmin) {
     return { error: "Seul l'administrateur ou le propriétaire de l'église peut modifier une ressource." };
   }
@@ -265,7 +265,7 @@ export async function updateResource(input: {
 }
 
 export async function toggleBookmark(resourceId: string): Promise<{ bookmarked?: boolean; error?: string }> {
-  const check = await checkPermission("training.view");
+  const check = await checkPermission("library.view");
   if (!check.allowed) return { error: "Action non autorisée." };
 
   const organizationId = check.organization.organization.id;
@@ -292,7 +292,7 @@ export async function toggleBookmark(resourceId: string): Promise<{ bookmarked?:
 }
 
 export async function rateResource(resourceId: string, rating: number): Promise<LibraryActionState> {
-  const check = await checkPermission("training.view");
+  const check = await checkPermission("library.view");
   if (!check.allowed) return { error: "Action non autorisée." };
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) return { error: "Note invalide (1 à 5)." };
 
@@ -314,7 +314,7 @@ export async function rateResource(resourceId: string, rating: number): Promise<
 
 /** Réservé aux gestionnaires de formation ; supprime aussi le fichier et la couverture. */
 export async function deleteResource(resourceId: string): Promise<LibraryActionState> {
-  const check = await checkPermission("training.manage");
+  const check = await checkPermission("library.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de supprimer cette ressource." };
 
   const organizationId = check.organization.organization.id;
@@ -339,7 +339,7 @@ export async function deleteResource(resourceId: string): Promise<LibraryActionS
 }
 
 export async function createLibraryCategory(_prev: LibraryActionState, formData: FormData): Promise<LibraryActionState> {
-  const check = await checkPermission("training.manage");
+  const check = await checkPermission("library.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de gérer les catégories." };
 
   const parsed = libraryCategorySchema.safeParse({ name: formData.get("name") });
@@ -359,7 +359,7 @@ export async function createLibraryCategory(_prev: LibraryActionState, formData:
 
 /** Les ressources de la catégorie supprimée restent (sans catégorie). */
 export async function deleteLibraryCategory(categoryId: string): Promise<LibraryActionState> {
-  const check = await checkPermission("training.manage");
+  const check = await checkPermission("library.manage");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de gérer les catégories." };
 
   const supabase = await createClient();

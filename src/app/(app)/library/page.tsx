@@ -36,12 +36,12 @@ export default async function LibraryPage({
 }: {
   searchParams: Promise<{ q?: string; type?: string; categoryId?: string; format?: string; sort?: string; saved?: string; page?: string }>;
 }) {
-  const check = await checkPermission("training.view");
+  const check = await checkPermission("library.view");
   if (!check.allowed) {
     return (
       <div className="flex flex-col gap-6">
         <PageHero {...HERO} />
-        <PermissionDenied requiredPermission="training.view" />
+        <PermissionDenied requiredPermission="library.view" />
       </div>
     );
   }
@@ -51,7 +51,7 @@ export default async function LibraryPage({
   const type = params.type && params.type in RESOURCE_TYPE_TABS ? params.type : "";
   const sort = ["downloads", "views", "title"].includes(params.sort ?? "") ? (params.sort as string) : "recent";
   const organizationId = check.organization.organization.id;
-  const canManage = check.context.isAdmin || check.context.permissions.has("training.manage");
+  const canManage = check.context.isAdmin || check.context.permissions.has("library.manage");
 
   const loaded = await guardSchema(() =>
     Promise.all([

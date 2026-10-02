@@ -23,19 +23,19 @@ const HERO = {
 const n = (value: number) => new Intl.NumberFormat("fr-FR").format(value);
 
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ view?: string; q?: string; page?: string }> }) {
-  const check = await checkPermission("communication.view");
+  const check = await checkPermission("messages.view");
   if (!check.allowed) {
     return (
       <div className="flex flex-col gap-6">
         <PageHero {...HERO} />
-        <PermissionDenied requiredPermission="communication.view" />
+        <PermissionDenied requiredPermission="messages.view" />
       </div>
     );
   }
 
   const params = await searchParams;
   const organizationId = check.organization.organization.id;
-  const canSend = check.context.isAdmin || check.context.permissions.has("communication.send");
+  const canSend = check.context.isAdmin || check.context.permissions.has("messages.send");
   const view = ["sms", "email", "draft", "scheduled"].includes(params.view ?? "") ? (params.view as string) : "";
   const page = Math.max(1, Number(params.page) || 1);
 

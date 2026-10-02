@@ -391,6 +391,19 @@ Correction au passage : la palette `blue` de Tailwind était entièrement rempla
   l'église, interdit de modifier son propre rôle, réserve l'attribution / le retrait d'un rôle d'administrateur aux administrateurs, empêche de rétrograder le dernier
   administrateur, et ajoute le nouveau rôle avant de retirer les anciens (jamais de membre sans rôle). Confirmation « Rôle mis à jour » affichée sous la liste.
 
+### Permissions par module (Paramètres > Rôles)
+
+Le catalogue passe de 61 à 70 permissions : certifications, bibliothèque, messages SMS/Email, médias, salles et équipements ont désormais **leurs propres permissions**
+(avant, ils dépendaient de `training.*`, `communication.*` et `resources.*`) : `certifications.view`, `library.view` / `library.manage`, `messages.view` / `messages.send`,
+`media.view` / `media.manage`, `rooms.view` / `rooms.manage` / `rooms.reserve`, `equipment.view` / `equipment.manage` / `equipment.reserve`. Les pages, actions serveur, le menu
+et la matrice des rôles les utilisent ; la matrice affiche un libellé pour chaque module. Annonces : `communication.*` (sans `communication.send`, remplacée par `messages.send`) ;
+cours : `training.*`. Dans Salles & équipements, chaque onglet, KPI, bouton et réservation respecte le droit du type concerné (un rôle qui n'a que `equipment.*` ne voit
+pas les salles, et inversement ; les brouillons ne sont visibles que de qui gère le type).
+**Migration à appliquer** : [`db/migrations/2026-10-12-permissions-modules.sql`](db/migrations/2026-10-12-permissions-modules.sql) (idempotente, incluse dans `db/schema.sql` et
+`2026-10-all-migrations.sql`, testée deux fois sur Postgres 16) : ajoute les nouvelles permissions, **reprend les droits déjà accordés** (un rôle qui avait `training.view` reçoit `certifications.view`
+et `library.view`, `communication.view` → `messages.view` + `media.view`, `resources.*` → `rooms.*` + `equipment.*`, etc.) puis supprime `communication.send` et `resources.*`. À exécuter AVANT
+de déployer : sans elle, les rôles personnalisés perdent l'accès à ces modules (les administrateurs gardent tout) et la matrice n'affiche pas les nouvelles lignes.
+
 ### Migrations manquantes : message explicite au lieu d'une page en erreur
 
 Les pages `/training`, `/training/certifications`, `/library`, `/communication` (et ses pages de
@@ -407,7 +420,7 @@ formulaire d'annonce (seuls Facebook, Instagram et le partage WhatsApp restent).
 
 | Quoi | Où | Pour |
 | --- | --- | --- |
-| `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces, médias, salles & équipements (3 au 11 oct.) |
+| `db/migrations/2026-10-all-migrations.sql` (idempotent) | SQL Editor Supabase | Cours, catégories de cours, certifications, bibliothèque, annonces, médias, salles & équipements, permissions par module (3 au 12 oct.) |
 | `db/migrations/2026-10-07-library-pdf-docx.sql` | SQL Editor Supabase | Seulement si `2026-10-06-library.sql` avait été exécutée avant la restriction PDF/DOCX |
 | `SOCIAL_TOKEN_KEY` (`openssl rand -base64 32`) | Variables Vercel | Connecter Facebook / Instagram (Paramètres > Réseaux sociaux) |
 | `YOUTUBE_API_KEY` + migration `2026-10-10-media-library.sql` (+ `2026-10-11-resources-forms.sql` pour Salles & équipements) | Variables Vercel / SQL Editor | Page Médias (vidéos de la chaîne YouTube, téléversements) |

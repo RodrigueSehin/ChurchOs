@@ -43,10 +43,10 @@ export type NavItem = {
   /** Phase du plan de sprints qui livre ce module. Utilisé par ComingSoonPage tant que le module n'est pas implémenté. */
   phase: number;
   /**
-   * Permission requise pour voir l'entrée dans le menu (la même que celle que vérifie la page). Absente = visible
+   * Permission requise pour voir l'entrée dans le menu (la même que celle que vérifie la page ; une liste = l'une d'elles suffit). Absente = visible
    * par tout membre connecté. La page reste protégée côté serveur : le menu filtré n'est qu'un confort.
    */
-  permission?: string;
+  permission?: string | string[];
 };
 
 export type NavSection = {
@@ -109,23 +109,23 @@ export const navSections: NavSection[] = [
     label: "Formations",
     items: [
       { title: "Cours & discipolat", href: "/training", icon: GraduationCap, phase: 10, permission: "training.view" },
-      { title: "Certifications", href: "/training/certifications", icon: Award, phase: 10, permission: "training.view" },
-      { title: "Bibliothèque", href: "/library", icon: Library, phase: 10, permission: "training.view" },
+      { title: "Certifications", href: "/training/certifications", icon: Award, phase: 10, permission: "certifications.view" },
+      { title: "Bibliothèque", href: "/library", icon: Library, phase: 10, permission: "library.view" },
     ],
   },
   {
     label: "Communication",
     items: [
       { title: "Annonces", href: "/communication", icon: Megaphone, phase: 11, permission: "communication.view" },
-      { title: "Messages (SMS/Email)", href: "/communication/messages", icon: MessageSquareText, phase: 11, permission: "communication.view" },
-      { title: "Médias", href: "/communication/media", icon: Images, phase: 11, permission: "communication.view" },
+      { title: "Messages (SMS/Email)", href: "/communication/messages", icon: MessageSquareText, phase: 11, permission: "messages.view" },
+      { title: "Médias", href: "/communication/media", icon: Images, phase: 11, permission: "media.view" },
     ],
   },
   {
     label: "Ressources",
     items: [
       { title: "Documents", href: "/documents", icon: FolderOpen, phase: 12, permission: "documents.view" },
-      { title: "Salles & équipements", href: "/resources", icon: Warehouse, phase: 12, permission: "resources.view" },
+      { title: "Salles & équipements", href: "/resources", icon: Warehouse, phase: 12, permission: ["rooms.view", "equipment.view"] },
     ],
   },
   {
@@ -171,5 +171,8 @@ export function findNavGroupLabel(href: string): string | null {
  */
 export function getAllowedNavHrefs(isAdmin: boolean, permissions: ReadonlySet<string>): string[] {
   const items = [...navSections.flatMap((section) => section.items), ...settingsNav];
-  return items.filter((item) => isAdmin || !item.permission || permissions.has(item.permission)).map((item) => item.href);
+  return items.filter((item) => {
+    if (isAdmin || !item.permission) return true;
+    return [item.permission].flat().some((code) => permissions.has(code));
+  }).map((item) => item.href);
 }

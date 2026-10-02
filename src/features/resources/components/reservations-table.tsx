@@ -23,7 +23,7 @@ function fmt(date: Date) {
   };
 }
 
-export function ReservationsTable({ items, currentUserId, canManage }: { items: ReservationEntry[]; currentUserId: string; canManage: boolean }) {
+export function ReservationsTable({ items, currentUserId, manage }: { items: ReservationEntry[]; currentUserId: string; manage: { room: boolean; equipment: boolean } }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-sm">
@@ -38,7 +38,7 @@ export function ReservationsTable({ items, currentUserId, canManage }: { items: 
         </thead>
         <tbody>
           {items.map((r) => (
-            <Row key={r.id} reservation={r} canEdit={canManage || r.reservedByUserId === currentUserId} />
+            <Row key={r.id} reservation={r} canEdit={(r.resourceType === "room" ? manage.room : manage.equipment) || r.reservedByUserId === currentUserId} />
           ))}
         </tbody>
       </table>

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Box, Building2 } from "lucide-react";
 
 import { checkPermission } from "@/lib/auth/guards";
+import { canOnResource, resourcePermission } from "@/features/resources/permissions";
 import { guardSchema } from "@/lib/db/schema-guard";
 import { MigrationNotice } from "@/components/shared/migration-notice";
 import { PageHeader } from "@/components/shared/page-header";
@@ -13,15 +14,8 @@ import { RoomForm } from "@/features/resources/components/room-form";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function EditResourcePage({ params }: { params: Promise<{ id: string }> }) {
-  const check = await checkPermission("resources.manage");
-  if (!check.allowed) {
-    return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="Modifier" />
-        <PermissionDenied requiredPermission="resources.manage" />
-      </div>
-    );
-  }
+  // Contexte du membre ; le droit exact (salle ou équipement) est vérifié une fois la ressource chargée.
+  const check = await checkPermission("rooms.manage");
 
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
@@ -33,6 +27,14 @@ export default async function EditResourcePage({ params }: { params: Promise<{ i
   if (!loaded.ok) return <MigrationNotice migration="2026-10-11-resources-forms.sql" />;
   const { resource, options } = loaded.data;
   if (!resource) notFound();
+  if (!canOnResource(check.context, resource.type, "manage")) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader title="Modifier" />
+        <PermissionDenied requiredPermission={resourcePermission(resource.type, "manage")} />
+      </div>
+    );
+  }
 
   const isRoom = resource.type === "room";
   return (

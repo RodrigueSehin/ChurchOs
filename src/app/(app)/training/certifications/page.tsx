@@ -48,12 +48,12 @@ export default async function CertificationsPage({
 }: {
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
-  const check = await checkPermission("training.view");
+  const check = await checkPermission("certifications.view");
   if (!check.allowed) {
     return (
       <div className="flex flex-col gap-6">
         <PageHero {...HERO} />
-        <PermissionDenied requiredPermission="training.view" />
+        <PermissionDenied requiredPermission="certifications.view" />
       </div>
     );
   }

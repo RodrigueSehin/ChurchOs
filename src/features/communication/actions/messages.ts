@@ -50,7 +50,7 @@ async function buildAudience(organizationId: string, ids: string[]): Promise<Mes
 
 /** Enregistre un message SMS / email : brouillon, envoi immédiat ou planifié (envoyé par la tâche planifiée). */
 export async function saveMessage(input: { id?: string; fields: Record<string, unknown> }): Promise<MessageActionState> {
-  const check = await checkPermission("communication.send");
+  const check = await checkPermission("messages.send");
   if (!check.allowed) return { error: "Vous n'avez pas la permission d'envoyer des messages." };
   const organizationId = check.organization.organization.id;
 
@@ -114,7 +114,7 @@ export async function saveMessage(input: { id?: string; fields: Record<string, u
 
 /** Envoie tout de suite un brouillon ou un message planifié. */
 export async function sendMessageNow(messageId: string): Promise<MessageActionState> {
-  const check = await checkPermission("communication.send");
+  const check = await checkPermission("messages.send");
   if (!check.allowed) return { error: "Vous n'avez pas la permission d'envoyer des messages." };
   const result = await dispatchMessage(messageId, check.organization.organization.id);
   revalidatePath("/communication/messages");
@@ -124,7 +124,7 @@ export async function sendMessageNow(messageId: string): Promise<MessageActionSt
 
 /** Supprime un message (les messages déjà envoyés restent dans l'historique : suppression réservée aux brouillons / planifiés, ou à l'administrateur). */
 export async function deleteMessage(messageId: string): Promise<MessageActionState> {
-  const check = await checkPermission("communication.send");
+  const check = await checkPermission("messages.send");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de supprimer ce message." };
   const organizationId = check.organization.organization.id;
   const where = check.context.isAdmin
@@ -139,7 +139,7 @@ export async function deleteMessage(messageId: string): Promise<MessageActionSta
 
 /** Nombre de destinataires joignables pour une audience (aperçu « N destinataires sélectionnés »). */
 export async function countRecipients(channel: "sms" | "email", ids: string[]): Promise<{ count: number; withoutContact: number; error?: string }> {
-  const check = await checkPermission("communication.send");
+  const check = await checkPermission("messages.send");
   if (!check.allowed) return { count: 0, withoutContact: 0, error: "Permission refusée." };
   const organizationId = check.organization.organization.id;
   const audience = await buildAudience(organizationId, ids);

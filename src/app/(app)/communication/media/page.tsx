@@ -26,19 +26,19 @@ const HERO = {
 const n = (value: number) => new Intl.NumberFormat("fr-FR").format(value);
 
 export default async function MediaPage({ searchParams }: { searchParams: Promise<{ type?: string; q?: string; page?: string }> }) {
-  const check = await checkPermission("communication.view");
+  const check = await checkPermission("media.view");
   if (!check.allowed) {
     return (
       <div className="flex flex-col gap-6">
         <PageHero {...HERO} />
-        <PermissionDenied requiredPermission="communication.view" />
+        <PermissionDenied requiredPermission="media.view" />
       </div>
     );
   }
 
   const params = await searchParams;
   const organizationId = check.organization.organization.id;
-  const canManage = check.context.isAdmin || check.context.permissions.has("communication.manage");
+  const canManage = check.context.isAdmin || check.context.permissions.has("media.manage");
   const type = ["photo", "video", "audio", "document"].includes(params.type ?? "") ? (params.type as string) : "";
   const page = Math.max(1, Number(params.page) || 1);
 

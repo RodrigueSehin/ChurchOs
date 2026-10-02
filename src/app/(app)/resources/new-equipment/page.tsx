@@ -9,12 +9,12 @@ import { getEquipmentFormOptions, probeResourceColumns } from "@/features/resour
 import { EquipmentForm } from "@/features/resources/components/equipment-form";
 
 export default async function NewEquipmentPage() {
-  const check = await checkPermission("resources.manage");
+  const check = await checkPermission("equipment.manage");
   if (!check.allowed) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader title="Nouvel équipement" />
-        <PermissionDenied requiredPermission="resources.manage" />
+        <PermissionDenied requiredPermission="equipment.manage" />
       </div>
     );
   }

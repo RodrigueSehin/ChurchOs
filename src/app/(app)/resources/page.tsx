@@ -11,6 +11,7 @@ import { NoResultsState } from "@/components/shared/no-results-state";
 import { Pagination } from "@/components/shared/pagination";
 import { Card, CardContent } from "@/components/ui/card";
 import { getReservationsBetween, getResourcesOverview } from "@/features/resources/queries";
+import { resourceAccess } from "@/features/resources/permissions";
 import { CalendarMonth } from "@/features/resources/components/calendar-month";
 import { EquipmentTable } from "@/features/resources/components/equipment-table";
 import { NewResourceMenu } from "@/features/resources/components/new-resource-menu";
@@ -28,25 +29,29 @@ const PAGE_SIZE = 10;
 const n = (value: number) => new Intl.NumberFormat("fr-FR").format(value);
 
 export default async function ResourcesPage({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string; page?: string; room?: string; month?: string }> }) {
-  const check = await checkPermission("resources.view");
-  if (!check.allowed) {
+  // Contexte du membre ; l'accès se juge ensuite par type : salles (`rooms.*`) et équipements (`equipment.*`).
+  const check = await checkPermission("rooms.view");
+  const access = resourceAccess(check.context);
+  if (!access.canView) {
     return (
       <div className="flex flex-col gap-6">
         <PageHero {...HERO} />
-        <PermissionDenied requiredPermission="resources.view" />
+        <PermissionDenied requiredPermission="rooms.view" />
       </div>
     );
   }
 
   const params = await searchParams;
-  const tab = ["rooms", "equipment", "reservations", "calendar"].includes(params.tab ?? "") ? (params.tab as string) : "rooms";
+  const availableTabs = [...(access.rooms.view ? ["rooms"] : []), ...(access.equipment.view ? ["equipment"] : []), "reservations", "calendar"];
+  const requestedTab = params.tab ?? "rooms";
+  // Un onglet auquel on n'a pas droit (lien ancien, salles sans `rooms.view`…) retombe sur le premier disponible.
+  const tab = availableTabs.includes(requestedTab) ? requestedTab : availableTabs[0]!;
   const organizationId = check.organization.organization.id;
-  const canManage = check.context.isAdmin || check.context.permissions.has("resources.manage");
-  const canReserve = check.context.isAdmin || check.context.permissions.has("resources.reserve");
+  const canManage = access.rooms.manage || access.equipment.manage;
   const page = Math.max(1, Number(params.page) || 1);
   const term = params.q?.trim().toLowerCase();
 
-  const loadedOverview = await guardSchema(() => getResourcesOverview(organizationId, canManage));
+  const loadedOverview = await guardSchema(() => getResourcesOverview(organizationId, access));
   if (!loadedOverview.ok) {
     return (
       <div className="flex flex-col gap-6">
@@ -75,7 +80,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
     sp.set("page", String(p));
     return `/resources?${sp.toString()}`;
   };
-  const toolbar = <ResourcesToolbar tab={tab} initialSearch={params.q ?? ""} actions={canManage ? <NewResourceMenu /> : undefined} />;
+  const toolbar = <ResourcesToolbar tab={tab} initialSearch={params.q ?? ""} actions={canManage ? <NewResourceMenu canRoom={access.rooms.manage} canEquipment={access.equipment.manage} /> : undefined} tabs={availableTabs} />;
 
   let content: React.ReactNode;
   if (tab === "rooms") {
@@ -83,8 +88,8 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
     content = (
       <RoomsWorkspace
         rooms={pageSlice(rooms)}
-        canManage={canManage}
-        canReserve={canReserve}
+        canManage={access.rooms.manage}
+        canReserve={access.rooms.reserve}
         isAdmin={check.context.isAdmin}
         toolbar={toolbar}
         empty={term ? <NoResultsState className="border-0" /> : <EmptyState icon={Warehouse} title="Aucune salle" description="Créez la première salle avec « Nouvelle salle »." className="border-0" />}
@@ -108,7 +113,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
         {items.length === 0 ? (
           term || params.room ? <NoResultsState className="border-0" /> : <EmptyState icon={Monitor} title="Aucun équipement" description="Ajoutez le premier équipement avec « Nouvel équipement »." className="border-0" />
         ) : (
-          <EquipmentTable items={pageSlice(items)} roomNames={roomNames} canManage={canManage} canReserve={canReserve} isAdmin={check.context.isAdmin} />
+          <EquipmentTable items={pageSlice(items)} roomNames={roomNames} canManage={access.equipment.manage} canReserve={access.equipment.reserve} isAdmin={check.context.isAdmin} />
         )}
         {footer(items.length, href({ room: params.room }), "équipement")}
       </div>
@@ -121,7 +126,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
         {items.length === 0 ? (
           term ? <NoResultsState className="border-0" /> : <EmptyState icon={CalendarCheck} title="Aucune réservation" description="Réservez une salle ou un équipement depuis l'onglet correspondant." className="border-0" />
         ) : (
-          <ReservationsTable items={pageSlice(items)} currentUserId={check.user.id} canManage={canManage} />
+          <ReservationsTable items={pageSlice(items)} currentUserId={check.user.id} manage={{ room: access.rooms.manage, equipment: access.equipment.manage }} />
         )}
         {footer(items.length, href({}), "réservation")}
       </div>
@@ -131,7 +136,9 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
     const now = new Date();
     const year = match ? Number(match[1]) : now.getUTCFullYear();
     const month = match ? Math.min(11, Math.max(0, Number(match[2]) - 1)) : now.getUTCMonth();
-    const monthReservations = await getReservationsBetween(organizationId, new Date(Date.UTC(year, month, 1)), new Date(Date.UTC(year, month + 1, 1)));
+    const monthReservations = (await getReservationsBetween(organizationId, new Date(Date.UTC(year, month, 1)), new Date(Date.UTC(year, month + 1, 1)))).filter((r) =>
+      r.resourceType === "room" ? access.rooms.view : access.equipment.view,
+    );
     content = (
       <div className="flex flex-col gap-4">
         {toolbar}
@@ -145,17 +152,19 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
       <PageHero {...HERO} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard icon={DoorOpen} iconClassName="bg-blue-100 text-blue-600" label="Salles" value={n(kpis.rooms.value)} delta={kpis.rooms.delta} deltaSuffix="" periodLabel="vs mois dernier" />
-        <KpiCard icon={Monitor} iconClassName="bg-purple-100 text-purple-600" label="Équipements" value={n(kpis.equipment.value)} delta={kpis.equipment.delta} deltaSuffix="" periodLabel="vs mois dernier" />
+        {access.rooms.view && <KpiCard icon={DoorOpen} iconClassName="bg-blue-100 text-blue-600" label="Salles" value={n(kpis.rooms.value)} delta={kpis.rooms.delta} deltaSuffix="" periodLabel="vs mois dernier" />}
+        {access.equipment.view && <KpiCard icon={Monitor} iconClassName="bg-purple-100 text-purple-600" label="Équipements" value={n(kpis.equipment.value)} delta={kpis.equipment.delta} deltaSuffix="" periodLabel="vs mois dernier" />}
         <KpiCard icon={CalendarCheck} iconClassName="bg-red-100 text-red-500" label="Réservations ce mois" value={n(kpis.reservations.value)} delta={kpis.reservations.growthPct ?? undefined} periodLabel="vs mois dernier" />
-        <KpiCard
-          icon={ShieldCheck}
-          iconClassName="bg-green-100 text-green-600"
-          label="Taux d'occupation"
-          value={kpis.occupancy.value === null ? "—" : `${kpis.occupancy.value}%`}
-          delta={kpis.occupancy.delta ?? undefined}
-          periodLabel="vs 30 jours précédents"
-        />
+        {access.rooms.view && (
+          <KpiCard
+            icon={ShieldCheck}
+            iconClassName="bg-green-100 text-green-600"
+            label="Taux d'occupation"
+            value={kpis.occupancy.value === null ? "—" : `${kpis.occupancy.value}%`}
+            delta={kpis.occupancy.delta ?? undefined}
+            periodLabel="vs 30 jours précédents"
+          />
+        )}
       </div>
 
       <Card>

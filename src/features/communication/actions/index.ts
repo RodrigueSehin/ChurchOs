@@ -380,7 +380,7 @@ export async function deleteTemplate(templateId: string): Promise<CommunicationA
  * `message_id` sur `notifications` dans le schéma réel).
  */
 export async function sendMessage(_prev: CommunicationActionState, formData: FormData): Promise<CommunicationActionState> {
-  const check = await checkPermission("communication.send");
+  const check = await checkPermission("messages.send");
   if (!check.allowed) return { error: "Vous n'avez pas la permission d'envoyer un message." };
 
   const parsed = messageSchema.safeParse({
@@ -479,7 +479,7 @@ export async function sendMessage(_prev: CommunicationActionState, formData: For
  * tout webhook configuré côté client) pour rafraîchir le statut réel après l'envoi.
  */
 export async function refreshMessageStatuses(messageId: string): Promise<CommunicationActionState> {
-  const check = await checkPermission("communication.send");
+  const check = await checkPermission("messages.send");
   if (!check.allowed) return { error: "Vous n'avez pas la permission de rafraîchir ce statut." };
 
   const supabase = await createClient();
